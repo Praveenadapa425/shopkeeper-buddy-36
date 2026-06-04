@@ -16,7 +16,7 @@ type ProductRow = {
   id: string;
   name: string;
   stock_qty: number;
-  selling_price: string;
+  selling_price: number;
   low_stock_threshold: number;
 };
 

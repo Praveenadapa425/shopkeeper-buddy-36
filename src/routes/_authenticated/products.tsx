@@ -20,7 +20,7 @@ type Product = {
   name: string;
   image_url: string | null;
   stock_qty: number;
-  selling_price: string;
+  selling_price: number;
   low_stock_threshold: number;
   category_id: string | null;
 };
