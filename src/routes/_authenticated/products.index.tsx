@@ -31,8 +31,11 @@ type Category = { id: string; name: string };
 
 function ProductsPage() {
   const { t } = useI18n();
+  const nav = useNavigate();
+  const { requireEdit } = useEditUnlock();
   const [q, setQ] = useState("");
   const [cat, setCat] = useState<string>("all");
+
 
   const { data: cats = [] } = useQuery({
     queryKey: ["categories"],
