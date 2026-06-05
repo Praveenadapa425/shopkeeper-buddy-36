@@ -51,12 +51,13 @@ function ProductsPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("products")
-        .select("id, name, image_url, stock_qty, selling_price, low_stock_threshold, category_id")
+        .select("id, name, image_url, stock_qty, selling_price, low_stock_threshold, category_id, product_variants(selling_price)")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as Product[];
+      return (data ?? []) as (Product & { product_variants: { selling_price: number }[] })[];
     },
   });
+
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -117,9 +118,10 @@ function ProductsPage() {
                   </div>
                   <div className="space-y-1 p-3">
                     <p className="truncate text-base font-semibold">{p.name}</p>
-                    <p className="text-lg font-bold text-primary">{formatINR(p.selling_price)}</p>
+                    <PriceLine product={p} />
                     <StockBadge qty={p.stock_qty} threshold={p.low_stock_threshold} />
                   </div>
+
                 </Link>
                 <div className="flex gap-2 border-t p-2">
                   <Button asChild variant="ghost" size="sm" className="flex-1 gap-1.5">
@@ -159,9 +161,25 @@ function CatChip({ active, onClick, children }: { active: boolean; onClick: () =
   );
 }
 
+function PriceLine({ product }: { product: Product & { product_variants?: { selling_price: number }[] } }) {
+  const { t } = useI18n();
+  const prices = (product.product_variants ?? []).map((v) => Number(v.selling_price)).filter((n) => Number.isFinite(n));
+  if (prices.length === 0) {
+    return <p className="text-lg font-bold text-primary">{formatINR(product.selling_price)}</p>;
+  }
+  const min = Math.min(...prices);
+  const max = Math.max(...prices);
+  return (
+    <p className="text-lg font-bold text-primary">
+      {min === max ? formatINR(min) : `${t("from")} ${formatINR(min)}`}
+    </p>
+  );
+}
+
 function StockBadge({ qty, threshold }: { qty: number; threshold: number }) {
   const { t } = useI18n();
   if (qty <= 0) return <Badge variant="destructive">{t("out_of_stock")}</Badge>;
   if (qty <= threshold) return <Badge className="bg-warning text-warning-foreground hover:bg-warning">{qty} · {t("low_stock")}</Badge>;
   return <Badge variant="secondary">{qty} {t("units")}</Badge>;
 }
+
