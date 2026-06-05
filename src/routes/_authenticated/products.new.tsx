@@ -8,12 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { ProductImage } from "@/components/ProductImage";
-import { Camera, ImagePlus, Trash2, ArrowLeft, Save } from "lucide-react";
+import { Camera, ImagePlus, Trash2, ArrowLeft, Save, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 
 type Category = { id: string; name: string };
 
 type Mode = { kind: "create" } | { kind: "edit"; id: string };
+
+type VariantRow = { id?: string; value: string; selling_price: string };
 
 export function ProductForm({ mode }: { mode: Mode }) {
   const { t } = useI18n();
@@ -26,7 +28,7 @@ export function ProductForm({ mode }: { mode: Mode }) {
   const [categoryId, setCategoryId] = useState<string>("");
   const [newCat, setNewCat] = useState("");
   const [stockQty, setStockQty] = useState<string>("0");
-  const [sellingPrice, setSellingPrice] = useState<string>("");
+  const [variants, setVariants] = useState<VariantRow[]>([{ value: "", selling_price: "" }]);
   const [costPrice, setCostPrice] = useState<string>("");
   const [lowStock, setLowStock] = useState<string>("5");
   const [imagePath, setImagePath] = useState<string | null>(null);
@@ -58,17 +60,53 @@ export function ProductForm({ mode }: { mode: Mode }) {
     },
   });
 
+  const { data: existingVariants } = useQuery({
+    queryKey: ["product-variants", mode.kind === "edit" ? mode.id : null],
+    enabled: mode.kind === "edit",
+    queryFn: async () => {
+      if (mode.kind !== "edit") return [];
+      const { data, error } = await supabase
+        .from("product_variants")
+        .select("id, value, selling_price, sort_order")
+        .eq("product_id", mode.id)
+        .order("sort_order");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
   useEffect(() => {
     if (existing) {
       setName(existing.name ?? "");
       setCategoryId(existing.category_id ?? "");
       setStockQty(String(existing.stock_qty ?? 0));
-      setSellingPrice(String(existing.selling_price ?? ""));
       setCostPrice(String(existing.cost_price ?? ""));
       setLowStock(String(existing.low_stock_threshold ?? 5));
       setImagePath(existing.image_url ?? null);
     }
   }, [existing]);
+
+  useEffect(() => {
+    if (existingVariants && existingVariants.length > 0) {
+      setVariants(
+        existingVariants.map((v) => ({
+          id: v.id,
+          value: v.value,
+          selling_price: String(v.selling_price ?? ""),
+        })),
+      );
+    } else if (existing && (!existingVariants || existingVariants.length === 0)) {
+      // migrate legacy single price into one variant row
+      setVariants([{ value: "", selling_price: String(existing.selling_price ?? "") }]);
+    }
+  }, [existingVariants, existing]);
+
+  const updateVariant = (idx: number, patch: Partial<VariantRow>) => {
+    setVariants((rows) => rows.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+  };
+  const addVariant = () => setVariants((r) => [...r, { value: "", selling_price: "" }]);
+  const removeVariant = (idx: number) =>
+    setVariants((r) => (r.length <= 1 ? r : r.filter((_, i) => i !== idx)));
 
   const handleFile = async (file: File | null) => {
     if (!file) return;
@@ -93,6 +131,22 @@ export function ProductForm({ mode }: { mode: Mode }) {
 
   const onSave = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const cleaned = variants
+      .map((v) => ({ ...v, value: v.value.trim(), selling_price: v.selling_price.trim() }))
+      .filter((v) => v.value !== "" || v.selling_price !== "");
+    if (cleaned.length === 0) {
+      toast.error(t("variant_required"));
+      return;
+    }
+    for (const v of cleaned) {
+      const price = Number(v.selling_price);
+      if (!v.value || !v.selling_price || !Number.isFinite(price) || price < 0) {
+        toast.error(t("variant_invalid"));
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       let cat = categoryId || null;
@@ -106,30 +160,60 @@ export function ProductForm({ mode }: { mode: Mode }) {
         cat = data.id;
       }
 
+      const minPrice = Math.min(...cleaned.map((v) => Number(v.selling_price)));
+
       const payload = {
         name: name.trim(),
         category_id: cat,
         image_url: imagePath,
         stock_qty: parseInt(stockQty || "0", 10),
-        selling_price: Number(sellingPrice || 0),
+        selling_price: minPrice,
         cost_price: Number(costPrice || 0),
         low_stock_threshold: parseInt(lowStock || "5", 10),
       };
 
+      let productId: string;
       if (mode.kind === "create") {
         const { data: u } = await supabase.auth.getUser();
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from("products")
-          .insert({ ...payload, created_by: u.user?.id ?? null });
+          .insert({ ...payload, created_by: u.user?.id ?? null })
+          .select("id")
+          .single();
         if (error) throw error;
+        productId = data.id;
       } else {
-        const { error } = await supabase.from("products").update(payload).eq("id", mode.id);
+        productId = mode.id;
+        const { error } = await supabase.from("products").update(payload).eq("id", productId);
         if (error) throw error;
       }
+
+      // Sync variants: delete removed, upsert kept/new
+      if (mode.kind === "edit") {
+        const keepIds = cleaned.map((v) => v.id).filter((x): x is string => !!x);
+        let delQ = supabase.from("product_variants").delete().eq("product_id", productId);
+        if (keepIds.length > 0) delQ = delQ.not("id", "in", `(${keepIds.join(",")})`);
+        const { error: delErr } = await delQ;
+        if (delErr) throw delErr;
+      }
+
+      const rows = cleaned.map((v, i) => ({
+        ...(v.id ? { id: v.id } : {}),
+        product_id: productId,
+        value: v.value,
+        selling_price: Number(v.selling_price),
+        sort_order: i,
+      }));
+      const { error: upErr } = await supabase
+        .from("product_variants")
+        .upsert(rows, { onConflict: "id" });
+      if (upErr) throw upErr;
+
       toast.success(t("saved"));
       await qc.invalidateQueries({ queryKey: ["products"] });
       await qc.invalidateQueries({ queryKey: ["products-stats"] });
       await qc.invalidateQueries({ queryKey: ["categories"] });
+      await qc.invalidateQueries({ queryKey: ["product-variants"] });
       nav({ to: "/products" });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : t("error"));
@@ -239,13 +323,64 @@ export function ProductForm({ mode }: { mode: Mode }) {
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="sp">{t("selling_price")} (₹)</Label>
-          <Input id="sp" type="number" inputMode="decimal" min="0" step="0.01" value={sellingPrice} onChange={(e) => setSellingPrice(e.target.value)} required className="h-12" />
-        </div>
-
-        <div className="space-y-1.5">
           <Label htmlFor="cp">{t("cost_price")} (₹)</Label>
           <Input id="cp" type="number" inputMode="decimal" min="0" step="0.01" value={costPrice} onChange={(e) => setCostPrice(e.target.value)} required className="h-12" />
+        </div>
+      </Card>
+
+      <Card className="space-y-3 p-4">
+        <div className="flex items-center justify-between">
+          <Label>{t("variants")}</Label>
+          <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={addVariant}>
+            <Plus className="h-4 w-4" /> {t("add_variant")}
+          </Button>
+        </div>
+
+        <div className="space-y-3">
+          {variants.map((v, i) => (
+            <div key={i} className="flex items-end gap-2">
+              <div className="flex-1 space-y-1">
+                <Label htmlFor={`vv-${i}`} className="text-xs text-muted-foreground">
+                  {t("variant_value")}
+                </Label>
+                <Input
+                  id={`vv-${i}`}
+                  value={v.value}
+                  onChange={(e) => updateVariant(i, { value: e.target.value })}
+                  placeholder="250ml"
+                  required
+                  className="h-12"
+                />
+              </div>
+              <div className="w-28 space-y-1">
+                <Label htmlFor={`vp-${i}`} className="text-xs text-muted-foreground">
+                  {t("selling_price")} (₹)
+                </Label>
+                <Input
+                  id={`vp-${i}`}
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step="0.01"
+                  value={v.selling_price}
+                  onChange={(e) => updateVariant(i, { selling_price: e.target.value })}
+                  required
+                  className="h-12"
+                />
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-12 w-12 text-destructive"
+                aria-label={t("remove")}
+                disabled={variants.length <= 1}
+                onClick={() => removeVariant(i)}
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+          ))}
         </div>
       </Card>
 

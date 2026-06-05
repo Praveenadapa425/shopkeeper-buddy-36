@@ -52,6 +52,20 @@ function ProductDetailsPage() {
     },
   });
 
+  const { data: variants = [] } = useQuery({
+    queryKey: ["product-variants", id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("product_variants")
+        .select("id, value, selling_price, sort_order")
+        .eq("product_id", id)
+        .order("sort_order");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+
   if (isLoading) {
     return <p className="py-8 text-center text-muted-foreground">{t("loading")}</p>;
   }
