@@ -117,16 +117,6 @@ function ProductDetailsPage() {
           <p className="mt-1 text-base">{category?.name ?? t("none")}</p>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">{t("selling_price")}</p>
-            <p className="mt-1 text-2xl font-bold text-primary">{formatINR(product.selling_price)}</p>
-          </div>
-          <div>
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">{t("stock")}</p>
-            <p className="mt-1 text-2xl font-bold">{product.stock_qty}</p>
-          </div>
-        </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
