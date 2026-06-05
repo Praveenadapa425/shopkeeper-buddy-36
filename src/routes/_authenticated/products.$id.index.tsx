@@ -21,6 +21,9 @@ function ProductDetailsPage() {
   const { id } = Route.useParams();
   const { t } = useI18n();
   const nav = useNavigate();
+  const { requireEdit } = useEditUnlock();
+  const goEdit = () => requireEdit(() => nav({ to: "/products/$id/edit", params: { id } }));
+
 
   const { data: product, isLoading } = useQuery({
     queryKey: ["product", id],
