@@ -130,20 +130,45 @@ function ProductDetailsPage() {
 
         <div className="grid grid-cols-2 gap-4">
           <div>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">{t("stock")}</p>
+            <p className="mt-1 text-2xl font-bold">{product.stock_qty}</p>
+          </div>
+          <div>
             <p className="text-xs uppercase tracking-wide text-muted-foreground">{t("low_stock_threshold")}</p>
             <p className="mt-1 text-base">{product.low_stock_threshold}</p>
           </div>
-          <div>
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">{t("status")}</p>
-            <div className="mt-1">
-              {lowStock.variant === "warning" ? (
-                <Badge className="bg-warning text-warning-foreground hover:bg-warning">{lowStock.label}</Badge>
-              ) : (
-                <Badge variant={lowStock.variant}>{lowStock.label}</Badge>
-              )}
-            </div>
+        </div>
+
+        <div>
+          <p className="text-xs uppercase tracking-wide text-muted-foreground">{t("status")}</p>
+          <div className="mt-1">
+            {lowStock.variant === "warning" ? (
+              <Badge className="bg-warning text-warning-foreground hover:bg-warning">{lowStock.label}</Badge>
+            ) : (
+              <Badge variant={lowStock.variant}>{lowStock.label}</Badge>
+            )}
           </div>
         </div>
+      </Card>
+
+      <Card className="space-y-3 p-4">
+        <p className="text-xs uppercase tracking-wide text-muted-foreground">{t("variants")}</p>
+        {variants.length === 0 ? (
+          <div>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">{t("selling_price")}</p>
+            <p className="mt-1 text-2xl font-bold text-primary">{formatINR(product.selling_price)}</p>
+          </div>
+        ) : (
+          <ul className="divide-y divide-border">
+            {variants.map((v) => (
+              <li key={v.id} className="flex items-center justify-between py-2.5">
+                <span className="text-base font-medium">{v.value}</span>
+                <span className="text-lg font-bold text-primary">{formatINR(Number(v.selling_price))}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+
       </Card>
 
       <Button size="lg" className="h-14 w-full gap-2 text-base font-semibold" onClick={goEdit}>
