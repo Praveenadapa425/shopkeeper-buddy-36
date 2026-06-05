@@ -3,11 +3,13 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { formatINR } from "@/lib/format";
+import { useEditUnlock } from "@/lib/editUnlock";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ProductImage } from "@/components/ProductImage";
 import { ArrowLeft, Pencil } from "lucide-react";
+
 
 export const Route = createFileRoute("/_authenticated/products/$id/")({
   component: ProductDetailsPage,
