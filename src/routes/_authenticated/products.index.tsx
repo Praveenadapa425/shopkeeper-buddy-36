@@ -127,11 +127,15 @@ function ProductsPage() {
                       <Eye className="h-4 w-4" /> {t("view")}
                     </Link>
                   </Button>
-                  <Button asChild variant="ghost" size="sm" className="flex-1 gap-1.5">
-                    <Link to="/products/$id/edit" params={{ id: p.id }}>
-                      <Pencil className="h-4 w-4" /> {t("edit")}
-                    </Link>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="flex-1 gap-1.5"
+                    onClick={() => requireEdit(() => nav({ to: "/products/$id/edit", params: { id: p.id } }))}
+                  >
+                    <Pencil className="h-4 w-4" /> {t("edit")}
                   </Button>
+
                 </div>
               </Card>
             </li>
