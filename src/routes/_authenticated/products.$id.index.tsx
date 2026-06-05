@@ -1,13 +1,15 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { formatINR } from "@/lib/format";
+import { useEditUnlock } from "@/lib/editUnlock";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ProductImage } from "@/components/ProductImage";
 import { ArrowLeft, Pencil } from "lucide-react";
+
 
 export const Route = createFileRoute("/_authenticated/products/$id/")({
   component: ProductDetailsPage,
@@ -19,6 +21,9 @@ function ProductDetailsPage() {
   const { id } = Route.useParams();
   const { t } = useI18n();
   const nav = useNavigate();
+  const { requireEdit } = useEditUnlock();
+  const goEdit = () => requireEdit(() => nav({ to: "/products/$id/edit", params: { id } }));
+
 
   const { data: product, isLoading } = useQuery({
     queryKey: ["product", id],
@@ -75,11 +80,10 @@ function ProductDetailsPage() {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <h1 className="text-lg font-bold">{t("product_details")}</h1>
-        <Button asChild variant="ghost" size="icon" aria-label={t("edit")}>
-          <Link to="/products/$id/edit" params={{ id }}>
-            <Pencil className="h-5 w-5" />
-          </Link>
+        <Button variant="ghost" size="icon" aria-label={t("edit")} onClick={goEdit}>
+          <Pencil className="h-5 w-5" />
         </Button>
+
       </div>
 
       <Card className="overflow-hidden p-0">
@@ -128,11 +132,10 @@ function ProductDetailsPage() {
         </div>
       </Card>
 
-      <Button asChild size="lg" className="h-14 w-full gap-2 text-base font-semibold">
-        <Link to="/products/$id/edit" params={{ id }}>
-          <Pencil className="h-5 w-5" /> {t("edit_product")}
-        </Link>
+      <Button size="lg" className="h-14 w-full gap-2 text-base font-semibold" onClick={goEdit}>
+        <Pencil className="h-5 w-5" /> {t("edit_product")}
       </Button>
+
     </div>
   );
 }

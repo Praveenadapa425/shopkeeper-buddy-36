@@ -1,15 +1,17 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { formatINR } from "@/lib/format";
+import { useEditUnlock } from "@/lib/editUnlock";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ProductImage } from "@/components/ProductImage";
 import { Plus, Search, Eye, Pencil } from "lucide-react";
+
 
 export const Route = createFileRoute("/_authenticated/products/")({
   component: ProductsPage,
@@ -29,8 +31,11 @@ type Category = { id: string; name: string };
 
 function ProductsPage() {
   const { t } = useI18n();
+  const nav = useNavigate();
+  const { requireEdit } = useEditUnlock();
   const [q, setQ] = useState("");
   const [cat, setCat] = useState<string>("all");
+
 
   const { data: cats = [] } = useQuery({
     queryKey: ["categories"],
@@ -122,11 +127,15 @@ function ProductsPage() {
                       <Eye className="h-4 w-4" /> {t("view")}
                     </Link>
                   </Button>
-                  <Button asChild variant="ghost" size="sm" className="flex-1 gap-1.5">
-                    <Link to="/products/$id/edit" params={{ id: p.id }}>
-                      <Pencil className="h-4 w-4" /> {t("edit")}
-                    </Link>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="flex-1 gap-1.5"
+                    onClick={() => requireEdit(() => nav({ to: "/products/$id/edit", params: { id: p.id } }))}
+                  >
+                    <Pencil className="h-4 w-4" /> {t("edit")}
                   </Button>
+
                 </div>
               </Card>
             </li>
