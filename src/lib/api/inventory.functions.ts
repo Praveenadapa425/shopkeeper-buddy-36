@@ -40,6 +40,30 @@ export const revealCostPrices = createServerFn({ method: "POST" })
     return { ok: true as const, costPrices: map };
   });
 
+/** Verify the admin PIN without returning any sensitive data. Used to gate edit access. */
+export const verifyAdminPin = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((data: { pin: string }) =>
+    z.object({ pin: z.string().regex(/^\d{4}$/) }).parse(data),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: settings, error } = await supabaseAdmin
+      .from("app_settings")
+      .select("admin_pin_hash")
+      .eq("id", 1)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!settings?.admin_pin_hash) {
+      return { ok: false as const, error: "PIN not set. Set an Admin PIN in Settings." };
+    }
+    const incoming = await sha256Hex(data.pin);
+    if (incoming !== settings.admin_pin_hash) {
+      return { ok: false as const, error: "wrong_pin" };
+    }
+    return { ok: true as const };
+  });
+
 export const setAdminPin = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((data: { currentPin?: string; newPin: string }) =>
