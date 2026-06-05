@@ -132,11 +132,10 @@ function ProductDetailsPage() {
         </div>
       </Card>
 
-      <Button asChild size="lg" className="h-14 w-full gap-2 text-base font-semibold">
-        <Link to="/products/$id/edit" params={{ id }}>
-          <Pencil className="h-5 w-5" /> {t("edit_product")}
-        </Link>
+      <Button size="lg" className="h-14 w-full gap-2 text-base font-semibold" onClick={goEdit}>
+        <Pencil className="h-5 w-5" /> {t("edit_product")}
       </Button>
+
     </div>
   );
 }
