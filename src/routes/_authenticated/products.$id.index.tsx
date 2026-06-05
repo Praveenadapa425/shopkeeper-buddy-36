@@ -80,11 +80,10 @@ function ProductDetailsPage() {
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <h1 className="text-lg font-bold">{t("product_details")}</h1>
-        <Button asChild variant="ghost" size="icon" aria-label={t("edit")}>
-          <Link to="/products/$id/edit" params={{ id }}>
-            <Pencil className="h-5 w-5" />
-          </Link>
+        <Button variant="ghost" size="icon" aria-label={t("edit")} onClick={goEdit}>
+          <Pencil className="h-5 w-5" />
         </Button>
+
       </div>
 
       <Card className="overflow-hidden p-0">
