@@ -68,6 +68,13 @@ const en: Dict = {
   view: "View",
   edit: "Edit",
   status: "Status",
+  variants: "Variants & prices",
+  variant_value: "Value (e.g. 250ml, Red)",
+  add_variant: "Add variant",
+  remove: "Remove",
+  variant_required: "Add at least one variant",
+  variant_invalid: "Fill all variant values and prices",
+  from: "From",
 };
 
 const te: Dict = {
@@ -134,6 +141,13 @@ const te: Dict = {
   view: "చూడండి",
   edit: "సవరించండి",
   status: "స్థితి",
+  variants: "వేరియంట్లు & ధరలు",
+  variant_value: "విలువ (ఉదా. 250ml, ఎరుపు)",
+  add_variant: "వేరియంట్ జోడించండి",
+  remove: "తీసివేయండి",
+  variant_required: "కనీసం ఒక వేరియంట్ జోడించండి",
+  variant_invalid: "అన్ని వేరియంట్ విలువలు మరియు ధరలను పూరించండి",
+  from: "నుండి",
 };
 
 const dicts: Record<Lang, Dict> = { en, te };
