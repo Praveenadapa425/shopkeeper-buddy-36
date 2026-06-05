@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ProductImage } from "@/components/ProductImage";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Eye, Pencil } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/products/")({
   component: ProductsPage,
@@ -97,21 +97,38 @@ function ProductsPage() {
       ) : filtered.length === 0 ? (
         <Card className="p-8 text-center text-muted-foreground">{t("no_products")}</Card>
       ) : (
-        <ul className="space-y-3">
+        <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {filtered.map((p) => (
             <li key={p.id}>
-              <Link to="/products/$id/edit" params={{ id: p.id }}>
-                <Card className="flex items-center gap-4 p-3 active:scale-[0.99] transition-transform">
-                  <ProductImage path={p.image_url} alt={p.name} className="h-20 w-20 shrink-0 rounded-xl" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-base font-semibold">{p.name}</p>
-                    <p className="mt-0.5 text-lg font-bold text-primary">{formatINR(p.selling_price)}</p>
-                    <div className="mt-1 flex items-center gap-2">
-                      <StockBadge qty={p.stock_qty} threshold={p.low_stock_threshold} />
-                    </div>
+              <Card className="overflow-hidden p-0">
+                <Link
+                  to="/products/$id"
+                  params={{ id: p.id }}
+                  className="block active:scale-[0.99] transition-transform"
+                  aria-label={`${t("view")} ${p.name}`}
+                >
+                  <div className="aspect-square w-full bg-muted">
+                    <ProductImage path={p.image_url} alt={p.name} className="h-full w-full" />
                   </div>
-                </Card>
-              </Link>
+                  <div className="space-y-1 p-3">
+                    <p className="truncate text-base font-semibold">{p.name}</p>
+                    <p className="text-lg font-bold text-primary">{formatINR(p.selling_price)}</p>
+                    <StockBadge qty={p.stock_qty} threshold={p.low_stock_threshold} />
+                  </div>
+                </Link>
+                <div className="flex gap-2 border-t p-2">
+                  <Button asChild variant="ghost" size="sm" className="flex-1 gap-1.5">
+                    <Link to="/products/$id" params={{ id: p.id }}>
+                      <Eye className="h-4 w-4" /> {t("view")}
+                    </Link>
+                  </Button>
+                  <Button asChild variant="ghost" size="sm" className="flex-1 gap-1.5">
+                    <Link to="/products/$id/edit" params={{ id: p.id }}>
+                      <Pencil className="h-4 w-4" /> {t("edit")}
+                    </Link>
+                  </Button>
+                </div>
+              </Card>
             </li>
           ))}
         </ul>

@@ -64,6 +64,10 @@ const en: Dict = {
   owner: "Shop Owner",
   app_settings: "App settings",
   install_hint: "Tip: Open the menu in your browser and tap \"Add to Home screen\" to install.",
+  product_details: "Product details",
+  view: "View",
+  edit: "Edit",
+  status: "Status",
 };
 
 const te: Dict = {
@@ -126,6 +130,10 @@ const te: Dict = {
   owner: "షాప్ యజమాని",
   app_settings: "యాప్ సెట్టింగ్‌లు",
   install_hint: "చిట్కా: మీ బ్రౌజర్ మెనూ తెరిచి \"హోమ్ స్క్రీన్‌కి జోడించు\" నొక్కండి.",
+  product_details: "ఉత్పత్తి వివరాలు",
+  view: "చూడండి",
+  edit: "సవరించండి",
+  status: "స్థితి",
 };
 
 const dicts: Record<Lang, Dict> = { en, te };
