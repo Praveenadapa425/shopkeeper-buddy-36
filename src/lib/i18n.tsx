@@ -75,6 +75,7 @@ const en: Dict = {
   variant_required: "Add at least one variant",
   variant_invalid: "Fill all variant values and prices",
   from: "From",
+  variant_stock: "Stock qty",
 };
 
 const te: Dict = {
@@ -148,6 +149,7 @@ const te: Dict = {
   variant_required: "కనీసం ఒక వేరియంట్ జోడించండి",
   variant_invalid: "అన్ని వేరియంట్ విలువలు మరియు ధరలను పూరించండి",
   from: "నుండి",
+  variant_stock: "నిల్వ సంఖ్య",
 };
 
 const dicts: Record<Lang, Dict> = { en, te };
