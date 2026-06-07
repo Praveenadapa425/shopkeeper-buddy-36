@@ -15,7 +15,7 @@ type Category = { id: string; name: string };
 
 type Mode = { kind: "create" } | { kind: "edit"; id: string };
 
-type VariantRow = { id?: string; value: string; cost_price: string; selling_price: string };
+type VariantRow = { id?: string; value: string; cost_price: string; selling_price: string; stock_quantity: string };
 
 export function ProductForm({ mode }: { mode: Mode }) {
   const { t } = useI18n();
@@ -29,7 +29,7 @@ export function ProductForm({ mode }: { mode: Mode }) {
   const [newCat, setNewCat] = useState("");
   const [stockQty, setStockQty] = useState<string>("0");
   const [variants, setVariants] = useState<VariantRow[]>([
-    { value: "", cost_price: "", selling_price: "" },
+    { value: "", cost_price: "", selling_price: "", stock_quantity: "0" },
   ]);
   const [lowStock, setLowStock] = useState<string>("5");
   const [imagePath, setImagePath] = useState<string | null>(null);
@@ -68,7 +68,7 @@ export function ProductForm({ mode }: { mode: Mode }) {
       if (mode.kind !== "edit") return [];
       const { data, error } = await supabase
         .from("product_variants")
-        .select("id, value, cost_price, selling_price, sort_order")
+        .select("id, value, cost_price, selling_price, stock_quantity, sort_order")
         .eq("product_id", mode.id)
         .order("sort_order");
       if (error) throw error;
@@ -94,6 +94,7 @@ export function ProductForm({ mode }: { mode: Mode }) {
           value: v.value,
           cost_price: String((v as { cost_price?: number }).cost_price ?? ""),
           selling_price: String(v.selling_price ?? ""),
+          stock_quantity: String((v as { stock_quantity?: number }).stock_quantity ?? 0),
         })),
       );
     } else if (existing && (!existingVariants || existingVariants.length === 0)) {
@@ -102,6 +103,7 @@ export function ProductForm({ mode }: { mode: Mode }) {
           value: "",
           cost_price: String(existing.cost_price ?? ""),
           selling_price: String(existing.selling_price ?? ""),
+          stock_quantity: String(existing.stock_qty ?? 0),
         },
       ]);
     }
@@ -111,7 +113,7 @@ export function ProductForm({ mode }: { mode: Mode }) {
     setVariants((rows) => rows.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
   };
   const addVariant = () =>
-    setVariants((r) => [...r, { value: "", cost_price: "", selling_price: "" }]);
+    setVariants((r) => [...r, { value: "", cost_price: "", selling_price: "", stock_quantity: "0" }]);
   const removeVariant = (idx: number) =>
     setVariants((r) => (r.length <= 1 ? r : r.filter((_, i) => i !== idx)));
 
@@ -145,6 +147,7 @@ export function ProductForm({ mode }: { mode: Mode }) {
         value: v.value.trim(),
         cost_price: v.cost_price.trim(),
         selling_price: v.selling_price.trim(),
+        stock_quantity: v.stock_quantity.trim(),
       }))
       .filter((v) => v.value !== "" || v.cost_price !== "" || v.selling_price !== "");
     if (cleaned.length === 0) {
@@ -154,6 +157,7 @@ export function ProductForm({ mode }: { mode: Mode }) {
     for (const v of cleaned) {
       const sp = Number(v.selling_price);
       const cp = Number(v.cost_price);
+      const sq = Number(v.stock_quantity || "0");
       if (
         !v.value ||
         !v.selling_price ||
@@ -161,7 +165,9 @@ export function ProductForm({ mode }: { mode: Mode }) {
         !Number.isFinite(sp) ||
         sp < 0 ||
         !Number.isFinite(cp) ||
-        cp < 0
+        cp < 0 ||
+        !Number.isFinite(sq) ||
+        sq < 0
       ) {
         toast.error(t("variant_invalid"));
         return;
@@ -183,12 +189,13 @@ export function ProductForm({ mode }: { mode: Mode }) {
 
       const firstPrice = Number(cleaned[0].selling_price);
       const firstCost = Number(cleaned[0].cost_price);
+      const totalStock = cleaned.reduce((s, v) => s + Number(v.stock_quantity || "0"), 0);
 
       const payload = {
         name: name.trim(),
         category_id: cat,
         image_url: imagePath,
-        stock_qty: parseInt(stockQty || "0", 10),
+        stock_qty: totalStock,
         selling_price: firstPrice,
         cost_price: firstCost,
         low_stock_threshold: parseInt(lowStock || "5", 10),
@@ -224,6 +231,7 @@ export function ProductForm({ mode }: { mode: Mode }) {
         value: v.value,
         cost_price: Number(v.cost_price),
         selling_price: Number(v.selling_price),
+        stock_quantity: Number(v.stock_quantity || "0"),
         sort_order: i,
       }));
       const { error: upErr } = await supabase
@@ -333,15 +341,9 @@ export function ProductForm({ mode }: { mode: Mode }) {
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="stock">{t("stock")}</Label>
-            <Input id="stock" type="number" inputMode="numeric" min="0" value={stockQty} onChange={(e) => setStockQty(e.target.value)} className="h-12" />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="low">{t("low_stock_threshold")}</Label>
-            <Input id="low" type="number" inputMode="numeric" min="0" value={lowStock} onChange={(e) => setLowStock(e.target.value)} className="h-12" />
-          </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="low">{t("low_stock_threshold")}</Label>
+          <Input id="low" type="number" inputMode="numeric" min="0" value={lowStock} onChange={(e) => setLowStock(e.target.value)} className="h-12" />
         </div>
       </Card>
 
@@ -382,7 +384,7 @@ export function ProductForm({ mode }: { mode: Mode }) {
                   <X className="h-5 w-5" />
                 </Button>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <div className="space-y-1">
                   <Label htmlFor={`vc-${i}`} className="text-xs text-muted-foreground">
                     {t("cost_price")} (₹)
@@ -411,6 +413,21 @@ export function ProductForm({ mode }: { mode: Mode }) {
                     step="0.01"
                     value={v.selling_price}
                     onChange={(e) => updateVariant(i, { selling_price: e.target.value })}
+                    required
+                    className="h-12"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor={`vs-${i}`} className="text-xs text-muted-foreground">
+                    {t("variant_stock")}
+                  </Label>
+                  <Input
+                    id={`vs-${i}`}
+                    type="number"
+                    inputMode="numeric"
+                    min="0"
+                    value={v.stock_quantity}
+                    onChange={(e) => updateVariant(i, { stock_quantity: e.target.value })}
                     required
                     className="h-12"
                   />

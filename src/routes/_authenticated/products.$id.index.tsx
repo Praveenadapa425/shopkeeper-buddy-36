@@ -57,7 +57,7 @@ function ProductDetailsPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("product_variants")
-        .select("id, value, selling_price, sort_order")
+        .select("id, value, selling_price, stock_quantity, sort_order")
         .eq("product_id", id)
         .order("sort_order");
       if (error) throw error;
@@ -150,12 +150,18 @@ function ProductDetailsPage() {
           </div>
         ) : (
           <ul className="divide-y divide-border">
-            {variants.map((v) => (
-              <li key={v.id} className="flex items-center justify-between py-2.5">
-                <span className="text-base font-medium">{v.value}</span>
-                <span className="text-lg font-bold text-primary">{formatINR(Number(v.selling_price))}</span>
-              </li>
-            ))}
+            {variants.map((v) => {
+              const sq = (v as { stock_quantity?: number }).stock_quantity ?? 0;
+              return (
+                <li key={v.id} className="flex items-center justify-between py-2.5">
+                  <div className="flex flex-col">
+                    <span className="text-base font-medium">{v.value}</span>
+                    <span className="text-xs text-muted-foreground">{sq} {t("units")}</span>
+                  </div>
+                  <span className="text-lg font-bold text-primary">{formatINR(Number(v.selling_price))}</span>
+                </li>
+              );
+            })}
           </ul>
         )}
 
