@@ -51,10 +51,10 @@ function ProductsPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("products")
-        .select("id, name, image_url, stock_qty, selling_price, low_stock_threshold, category_id, product_variants(selling_price)")
+        .select("id, name, image_url, stock_qty, selling_price, low_stock_threshold, category_id, product_variants(selling_price, sort_order)")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as (Product & { product_variants: { selling_price: number }[] })[];
+      return (data ?? []) as (Product & { product_variants: { selling_price: number; sort_order: number }[] })[];
     },
   });
 
@@ -161,19 +161,10 @@ function CatChip({ active, onClick, children }: { active: boolean; onClick: () =
   );
 }
 
-function PriceLine({ product }: { product: Product & { product_variants?: { selling_price: number }[] } }) {
-  const { t } = useI18n();
-  const prices = (product.product_variants ?? []).map((v) => Number(v.selling_price)).filter((n) => Number.isFinite(n));
-  if (prices.length === 0) {
-    return <p className="text-lg font-bold text-primary">{formatINR(product.selling_price)}</p>;
-  }
-  const min = Math.min(...prices);
-  const max = Math.max(...prices);
-  return (
-    <p className="text-lg font-bold text-primary">
-      {min === max ? formatINR(min) : `${t("from")} ${formatINR(min)}`}
-    </p>
-  );
+function PriceLine({ product }: { product: Product & { product_variants?: { selling_price: number; sort_order: number }[] } }) {
+  const variants = (product.product_variants ?? []).slice().sort((a, b) => a.sort_order - b.sort_order);
+  const first = variants[0]?.selling_price ?? product.selling_price;
+  return <p className="text-lg font-bold text-primary">{formatINR(Number(first))}</p>;
 }
 
 function StockBadge({ qty, threshold }: { qty: number; threshold: number }) {

@@ -52,6 +52,7 @@ export type Database = {
       }
       product_variants: {
         Row: {
+          cost_price: number
           created_at: string
           id: string
           product_id: string
@@ -61,6 +62,7 @@ export type Database = {
           value: string
         }
         Insert: {
+          cost_price?: number
           created_at?: string
           id?: string
           product_id: string
@@ -70,6 +72,7 @@ export type Database = {
           value: string
         }
         Update: {
+          cost_price?: number
           created_at?: string
           id?: string
           product_id?: string

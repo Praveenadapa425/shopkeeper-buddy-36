@@ -15,7 +15,7 @@ type Category = { id: string; name: string };
 
 type Mode = { kind: "create" } | { kind: "edit"; id: string };
 
-type VariantRow = { id?: string; value: string; selling_price: string };
+type VariantRow = { id?: string; value: string; cost_price: string; selling_price: string };
 
 export function ProductForm({ mode }: { mode: Mode }) {
   const { t } = useI18n();
@@ -28,8 +28,9 @@ export function ProductForm({ mode }: { mode: Mode }) {
   const [categoryId, setCategoryId] = useState<string>("");
   const [newCat, setNewCat] = useState("");
   const [stockQty, setStockQty] = useState<string>("0");
-  const [variants, setVariants] = useState<VariantRow[]>([{ value: "", selling_price: "" }]);
-  const [costPrice, setCostPrice] = useState<string>("");
+  const [variants, setVariants] = useState<VariantRow[]>([
+    { value: "", cost_price: "", selling_price: "" },
+  ]);
   const [lowStock, setLowStock] = useState<string>("5");
   const [imagePath, setImagePath] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -67,7 +68,7 @@ export function ProductForm({ mode }: { mode: Mode }) {
       if (mode.kind !== "edit") return [];
       const { data, error } = await supabase
         .from("product_variants")
-        .select("id, value, selling_price, sort_order")
+        .select("id, value, cost_price, selling_price, sort_order")
         .eq("product_id", mode.id)
         .order("sort_order");
       if (error) throw error;
@@ -80,7 +81,6 @@ export function ProductForm({ mode }: { mode: Mode }) {
       setName(existing.name ?? "");
       setCategoryId(existing.category_id ?? "");
       setStockQty(String(existing.stock_qty ?? 0));
-      setCostPrice(String(existing.cost_price ?? ""));
       setLowStock(String(existing.low_stock_threshold ?? 5));
       setImagePath(existing.image_url ?? null);
     }
@@ -92,19 +92,26 @@ export function ProductForm({ mode }: { mode: Mode }) {
         existingVariants.map((v) => ({
           id: v.id,
           value: v.value,
+          cost_price: String((v as { cost_price?: number }).cost_price ?? ""),
           selling_price: String(v.selling_price ?? ""),
         })),
       );
     } else if (existing && (!existingVariants || existingVariants.length === 0)) {
-      // migrate legacy single price into one variant row
-      setVariants([{ value: "", selling_price: String(existing.selling_price ?? "") }]);
+      setVariants([
+        {
+          value: "",
+          cost_price: String(existing.cost_price ?? ""),
+          selling_price: String(existing.selling_price ?? ""),
+        },
+      ]);
     }
   }, [existingVariants, existing]);
 
   const updateVariant = (idx: number, patch: Partial<VariantRow>) => {
     setVariants((rows) => rows.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
   };
-  const addVariant = () => setVariants((r) => [...r, { value: "", selling_price: "" }]);
+  const addVariant = () =>
+    setVariants((r) => [...r, { value: "", cost_price: "", selling_price: "" }]);
   const removeVariant = (idx: number) =>
     setVariants((r) => (r.length <= 1 ? r : r.filter((_, i) => i !== idx)));
 
@@ -133,15 +140,29 @@ export function ProductForm({ mode }: { mode: Mode }) {
     e.preventDefault();
 
     const cleaned = variants
-      .map((v) => ({ ...v, value: v.value.trim(), selling_price: v.selling_price.trim() }))
-      .filter((v) => v.value !== "" || v.selling_price !== "");
+      .map((v) => ({
+        ...v,
+        value: v.value.trim(),
+        cost_price: v.cost_price.trim(),
+        selling_price: v.selling_price.trim(),
+      }))
+      .filter((v) => v.value !== "" || v.cost_price !== "" || v.selling_price !== "");
     if (cleaned.length === 0) {
       toast.error(t("variant_required"));
       return;
     }
     for (const v of cleaned) {
-      const price = Number(v.selling_price);
-      if (!v.value || !v.selling_price || !Number.isFinite(price) || price < 0) {
+      const sp = Number(v.selling_price);
+      const cp = Number(v.cost_price);
+      if (
+        !v.value ||
+        !v.selling_price ||
+        !v.cost_price ||
+        !Number.isFinite(sp) ||
+        sp < 0 ||
+        !Number.isFinite(cp) ||
+        cp < 0
+      ) {
         toast.error(t("variant_invalid"));
         return;
       }
@@ -160,15 +181,16 @@ export function ProductForm({ mode }: { mode: Mode }) {
         cat = data.id;
       }
 
-      const minPrice = Math.min(...cleaned.map((v) => Number(v.selling_price)));
+      const firstPrice = Number(cleaned[0].selling_price);
+      const firstCost = Number(cleaned[0].cost_price);
 
       const payload = {
         name: name.trim(),
         category_id: cat,
         image_url: imagePath,
         stock_qty: parseInt(stockQty || "0", 10),
-        selling_price: minPrice,
-        cost_price: Number(costPrice || 0),
+        selling_price: firstPrice,
+        cost_price: firstCost,
         low_stock_threshold: parseInt(lowStock || "5", 10),
       };
 
@@ -188,7 +210,6 @@ export function ProductForm({ mode }: { mode: Mode }) {
         if (error) throw error;
       }
 
-      // Sync variants: delete removed, upsert kept/new
       if (mode.kind === "edit") {
         const keepIds = cleaned.map((v) => v.id).filter((x): x is string => !!x);
         let delQ = supabase.from("product_variants").delete().eq("product_id", productId);
@@ -201,6 +222,7 @@ export function ProductForm({ mode }: { mode: Mode }) {
         ...(v.id ? { id: v.id } : {}),
         product_id: productId,
         value: v.value,
+        cost_price: Number(v.cost_price),
         selling_price: Number(v.selling_price),
         sort_order: i,
       }));
@@ -321,11 +343,6 @@ export function ProductForm({ mode }: { mode: Mode }) {
             <Input id="low" type="number" inputMode="numeric" min="0" value={lowStock} onChange={(e) => setLowStock(e.target.value)} className="h-12" />
           </div>
         </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="cp">{t("cost_price")} (₹)</Label>
-          <Input id="cp" type="number" inputMode="decimal" min="0" step="0.01" value={costPrice} onChange={(e) => setCostPrice(e.target.value)} required className="h-12" />
-        </div>
       </Card>
 
       <Card className="space-y-3 p-4">
@@ -336,49 +353,69 @@ export function ProductForm({ mode }: { mode: Mode }) {
           </Button>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-4">
           {variants.map((v, i) => (
-            <div key={i} className="flex items-end gap-2">
-              <div className="flex-1 space-y-1">
-                <Label htmlFor={`vv-${i}`} className="text-xs text-muted-foreground">
-                  {t("variant_value")}
-                </Label>
-                <Input
-                  id={`vv-${i}`}
-                  value={v.value}
-                  onChange={(e) => updateVariant(i, { value: e.target.value })}
-                  placeholder="250ml"
-                  required
-                  className="h-12"
-                />
+            <div key={i} className="rounded-lg border p-3 space-y-2">
+              <div className="flex items-end gap-2">
+                <div className="flex-1 space-y-1">
+                  <Label htmlFor={`vv-${i}`} className="text-xs text-muted-foreground">
+                    {t("variant_value")}
+                  </Label>
+                  <Input
+                    id={`vv-${i}`}
+                    value={v.value}
+                    onChange={(e) => updateVariant(i, { value: e.target.value })}
+                    placeholder="250ml"
+                    required
+                    className="h-12"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-12 w-12 text-destructive"
+                  aria-label={t("remove")}
+                  disabled={variants.length <= 1}
+                  onClick={() => removeVariant(i)}
+                >
+                  <X className="h-5 w-5" />
+                </Button>
               </div>
-              <div className="w-28 space-y-1">
-                <Label htmlFor={`vp-${i}`} className="text-xs text-muted-foreground">
-                  {t("selling_price")} (₹)
-                </Label>
-                <Input
-                  id={`vp-${i}`}
-                  type="number"
-                  inputMode="decimal"
-                  min="0"
-                  step="0.01"
-                  value={v.selling_price}
-                  onChange={(e) => updateVariant(i, { selling_price: e.target.value })}
-                  required
-                  className="h-12"
-                />
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label htmlFor={`vc-${i}`} className="text-xs text-muted-foreground">
+                    {t("cost_price")} (₹)
+                  </Label>
+                  <Input
+                    id={`vc-${i}`}
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.01"
+                    value={v.cost_price}
+                    onChange={(e) => updateVariant(i, { cost_price: e.target.value })}
+                    required
+                    className="h-12"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor={`vp-${i}`} className="text-xs text-muted-foreground">
+                    {t("selling_price")} (₹)
+                  </Label>
+                  <Input
+                    id={`vp-${i}`}
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.01"
+                    value={v.selling_price}
+                    onChange={(e) => updateVariant(i, { selling_price: e.target.value })}
+                    required
+                    className="h-12"
+                  />
+                </div>
               </div>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-12 w-12 text-destructive"
-                aria-label={t("remove")}
-                disabled={variants.length <= 1}
-                onClick={() => removeVariant(i)}
-              >
-                <X className="h-5 w-5" />
-              </Button>
             </div>
           ))}
         </div>
