@@ -147,6 +147,7 @@ export function ProductForm({ mode }: { mode: Mode }) {
         value: v.value.trim(),
         cost_price: v.cost_price.trim(),
         selling_price: v.selling_price.trim(),
+        stock_quantity: v.stock_quantity.trim(),
       }))
       .filter((v) => v.value !== "" || v.cost_price !== "" || v.selling_price !== "");
     if (cleaned.length === 0) {
@@ -156,6 +157,7 @@ export function ProductForm({ mode }: { mode: Mode }) {
     for (const v of cleaned) {
       const sp = Number(v.selling_price);
       const cp = Number(v.cost_price);
+      const sq = Number(v.stock_quantity || "0");
       if (
         !v.value ||
         !v.selling_price ||
@@ -163,7 +165,9 @@ export function ProductForm({ mode }: { mode: Mode }) {
         !Number.isFinite(sp) ||
         sp < 0 ||
         !Number.isFinite(cp) ||
-        cp < 0
+        cp < 0 ||
+        !Number.isFinite(sq) ||
+        sq < 0
       ) {
         toast.error(t("variant_invalid"));
         return;
@@ -185,12 +189,13 @@ export function ProductForm({ mode }: { mode: Mode }) {
 
       const firstPrice = Number(cleaned[0].selling_price);
       const firstCost = Number(cleaned[0].cost_price);
+      const totalStock = cleaned.reduce((s, v) => s + Number(v.stock_quantity || "0"), 0);
 
       const payload = {
         name: name.trim(),
         category_id: cat,
         image_url: imagePath,
-        stock_qty: parseInt(stockQty || "0", 10),
+        stock_qty: totalStock,
         selling_price: firstPrice,
         cost_price: firstCost,
         low_stock_threshold: parseInt(lowStock || "5", 10),
@@ -226,6 +231,7 @@ export function ProductForm({ mode }: { mode: Mode }) {
         value: v.value,
         cost_price: Number(v.cost_price),
         selling_price: Number(v.selling_price),
+        stock_quantity: Number(v.stock_quantity || "0"),
         sort_order: i,
       }));
       const { error: upErr } = await supabase
