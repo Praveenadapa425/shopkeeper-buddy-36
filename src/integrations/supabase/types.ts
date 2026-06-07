@@ -58,6 +58,7 @@ export type Database = {
           product_id: string
           selling_price: number
           sort_order: number
+          stock_quantity: number
           updated_at: string
           value: string
         }
@@ -68,6 +69,7 @@ export type Database = {
           product_id: string
           selling_price?: number
           sort_order?: number
+          stock_quantity?: number
           updated_at?: string
           value: string
         }
@@ -78,6 +80,7 @@ export type Database = {
           product_id?: string
           selling_price?: number
           sort_order?: number
+          stock_quantity?: number
           updated_at?: string
           value?: string
         }
