@@ -341,15 +341,9 @@ export function ProductForm({ mode }: { mode: Mode }) {
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="stock">{t("stock")}</Label>
-            <Input id="stock" type="number" inputMode="numeric" min="0" value={stockQty} onChange={(e) => setStockQty(e.target.value)} className="h-12" />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="low">{t("low_stock_threshold")}</Label>
-            <Input id="low" type="number" inputMode="numeric" min="0" value={lowStock} onChange={(e) => setLowStock(e.target.value)} className="h-12" />
-          </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="low">{t("low_stock_threshold")}</Label>
+          <Input id="low" type="number" inputMode="numeric" min="0" value={lowStock} onChange={(e) => setLowStock(e.target.value)} className="h-12" />
         </div>
       </Card>
 
