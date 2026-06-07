@@ -384,7 +384,7 @@ export function ProductForm({ mode }: { mode: Mode }) {
                   <X className="h-5 w-5" />
                 </Button>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <div className="space-y-1">
                   <Label htmlFor={`vc-${i}`} className="text-xs text-muted-foreground">
                     {t("cost_price")} (₹)
@@ -413,6 +413,21 @@ export function ProductForm({ mode }: { mode: Mode }) {
                     step="0.01"
                     value={v.selling_price}
                     onChange={(e) => updateVariant(i, { selling_price: e.target.value })}
+                    required
+                    className="h-12"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor={`vs-${i}`} className="text-xs text-muted-foreground">
+                    {t("variant_stock")}
+                  </Label>
+                  <Input
+                    id={`vs-${i}`}
+                    type="number"
+                    inputMode="numeric"
+                    min="0"
+                    value={v.stock_quantity}
+                    onChange={(e) => updateVariant(i, { stock_quantity: e.target.value })}
                     required
                     className="h-12"
                   />
