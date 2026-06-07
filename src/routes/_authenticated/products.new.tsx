@@ -15,7 +15,7 @@ type Category = { id: string; name: string };
 
 type Mode = { kind: "create" } | { kind: "edit"; id: string };
 
-type VariantRow = { id?: string; value: string; cost_price: string; selling_price: string };
+type VariantRow = { id?: string; value: string; cost_price: string; selling_price: string; stock_quantity: string };
 
 export function ProductForm({ mode }: { mode: Mode }) {
   const { t } = useI18n();
@@ -29,7 +29,7 @@ export function ProductForm({ mode }: { mode: Mode }) {
   const [newCat, setNewCat] = useState("");
   const [stockQty, setStockQty] = useState<string>("0");
   const [variants, setVariants] = useState<VariantRow[]>([
-    { value: "", cost_price: "", selling_price: "" },
+    { value: "", cost_price: "", selling_price: "", stock_quantity: "0" },
   ]);
   const [lowStock, setLowStock] = useState<string>("5");
   const [imagePath, setImagePath] = useState<string | null>(null);
@@ -68,7 +68,7 @@ export function ProductForm({ mode }: { mode: Mode }) {
       if (mode.kind !== "edit") return [];
       const { data, error } = await supabase
         .from("product_variants")
-        .select("id, value, cost_price, selling_price, sort_order")
+        .select("id, value, cost_price, selling_price, stock_quantity, sort_order")
         .eq("product_id", mode.id)
         .order("sort_order");
       if (error) throw error;
@@ -94,6 +94,7 @@ export function ProductForm({ mode }: { mode: Mode }) {
           value: v.value,
           cost_price: String((v as { cost_price?: number }).cost_price ?? ""),
           selling_price: String(v.selling_price ?? ""),
+          stock_quantity: String((v as { stock_quantity?: number }).stock_quantity ?? 0),
         })),
       );
     } else if (existing && (!existingVariants || existingVariants.length === 0)) {
@@ -102,6 +103,7 @@ export function ProductForm({ mode }: { mode: Mode }) {
           value: "",
           cost_price: String(existing.cost_price ?? ""),
           selling_price: String(existing.selling_price ?? ""),
+          stock_quantity: String(existing.stock_qty ?? 0),
         },
       ]);
     }
@@ -111,7 +113,7 @@ export function ProductForm({ mode }: { mode: Mode }) {
     setVariants((rows) => rows.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
   };
   const addVariant = () =>
-    setVariants((r) => [...r, { value: "", cost_price: "", selling_price: "" }]);
+    setVariants((r) => [...r, { value: "", cost_price: "", selling_price: "", stock_quantity: "0" }]);
   const removeVariant = (idx: number) =>
     setVariants((r) => (r.length <= 1 ? r : r.filter((_, i) => i !== idx)));
 
