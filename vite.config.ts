@@ -18,6 +18,7 @@ export default defineConfig({
       registerType: "autoUpdate",
       injectRegister: null, // we register from a guarded wrapper
       filename: "sw.js",
+      manifest: false, // we ship our own public/manifest.webmanifest
       devOptions: { enabled: false },
       workbox: {
         navigateFallback: "/",
