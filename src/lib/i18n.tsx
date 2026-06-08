@@ -76,6 +76,9 @@ const en: Dict = {
   variant_invalid: "Fill all variant values and prices",
   from: "From",
   variant_stock: "Stock qty",
+  online: "Online",
+  offline: "Offline — viewing cached data",
+  back_online: "Back online",
 };
 
 const te: Dict = {
@@ -150,6 +153,9 @@ const te: Dict = {
   variant_invalid: "అన్ని వేరియంట్ విలువలు మరియు ధరలను పూరించండి",
   from: "నుండి",
   variant_stock: "నిల్వ సంఖ్య",
+  online: "ఆన్‌లైన్",
+  offline: "ఆఫ్‌లైన్ — క్యాష్ చేసిన డేటా",
+  back_online: "మళ్ళీ ఆన్‌లైన్",
 };
 
 const dicts: Record<Lang, Dict> = { en, te };

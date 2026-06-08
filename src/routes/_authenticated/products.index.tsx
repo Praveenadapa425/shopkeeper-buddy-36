@@ -114,7 +114,7 @@ function ProductsPage() {
                   aria-label={`${t("view")} ${p.name}`}
                 >
                   <div className="aspect-square w-full bg-muted">
-                    <ProductImage path={p.image_url} alt={p.name} className="h-full w-full" />
+                    <ProductImage path={p.image_url} alt={p.name} variant="thumb" className="h-full w-full" />
                   </div>
                   <div className="space-y-1 p-3">
                     <p className="truncate text-base font-semibold">{p.name}</p>

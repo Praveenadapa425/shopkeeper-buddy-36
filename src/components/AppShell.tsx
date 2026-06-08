@@ -1,15 +1,22 @@
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { LayoutDashboard, Package, Settings as SettingsIcon, LogOut, Languages } from "lucide-react";
-import { type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
+import { OnlineStatus } from "@/components/OnlineStatus";
+import { registerAppServiceWorker } from "@/lib/registerSW";
+
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { t, lang, setLang } = useI18n();
   const loc = useLocation();
   const nav = useNavigate();
   const path = loc.pathname;
+
+  useEffect(() => {
+    registerAppServiceWorker();
+  }, []);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -24,6 +31,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
+      <OnlineStatus />
       <header className="safe-top sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur">
         <div className="mx-auto flex w-full max-w-3xl items-center justify-between px-4 py-3">
           <Link to="/" className="flex items-center gap-2">
