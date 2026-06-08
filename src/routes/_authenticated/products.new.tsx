@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import { ProductImage } from "@/components/ProductImage";
 import { Camera, ImagePlus, Trash2, ArrowLeft, Save, Plus, X } from "lucide-react";
 import { toast } from "sonner";
+import { optimizeFullImage, generateThumbnail } from "@/lib/imageOptimize";
 
 type Category = { id: string; name: string };
 
@@ -121,16 +122,29 @@ export function ProductForm({ mode }: { mode: Mode }) {
     if (!file) return;
     setUploading(true);
     try {
-      const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
-      const path = `${crypto.randomUUID()}.${ext}`;
-      const { error } = await supabase.storage.from("product-images").upload(path, file, {
-        cacheControl: "3600",
-        upsert: false,
-        contentType: file.type || "image/jpeg",
-      });
-      if (error) throw error;
+      // Optimize: WebP if possible, resize to <=1600px, target <=1MB.
+      const full = await optimizeFullImage(file);
+      const thumb = await generateThumbnail(full.blob);
+      const id = crypto.randomUUID();
+      const path = `${id}.${full.ext}`;
+
+      const [up1, up2] = await Promise.all([
+        supabase.storage.from("product-images").upload(path, full.blob, {
+          cacheControl: "31536000",
+          upsert: false,
+          contentType: full.mime,
+        }),
+        supabase.storage.from("product-images").upload(`thumb_${path}`, thumb.blob, {
+          cacheControl: "31536000",
+          upsert: false,
+          contentType: thumb.mime,
+        }),
+      ]);
+      if (up1.error) throw up1.error;
+      if (up2.error) throw up2.error;
+
       setImagePath(path);
-      setImagePreview(URL.createObjectURL(file));
+      setImagePreview(URL.createObjectURL(full.blob));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : t("error"));
     } finally {
