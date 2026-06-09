@@ -14,7 +14,7 @@ import { optimizeFullImage, generateThumbnail } from "@/lib/imageOptimize";
 import { fetchCategories, fetchProduct, fetchVariants } from "@/lib/offline/cache";
 import { applyOptimistic, enqueue } from "@/lib/offline/queue";
 
-type Category = { id: string; name: string };
+
 
 type Mode = { kind: "create" } | { kind: "edit"; id: string };
 
