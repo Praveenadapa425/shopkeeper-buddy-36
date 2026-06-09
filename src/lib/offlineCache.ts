@@ -363,81 +363,100 @@ export async function queueThumbnailPreload(products: { id: string; image_url: s
   void processPreloadQueue();
 }
 
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit = {},
+  timeoutMs = 8000,
+): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(id);
+  }
+}
+
 async function processPreloadQueue() {
   let successCount = 0;
   let failedCount = 0;
 
-  while (preloadQueue.length > 0) {
-    const item = preloadQueue.shift();
-    if (!item) break;
+  try {
+    while (preloadQueue.length > 0) {
+      const item = preloadQueue.shift();
+      if (!item) break;
 
-    const key = `thumb_${item.path}`;
-    const exists = await getOne<CachedImage>("images", key);
+      const key = `thumb_${item.path}`;
+      const exists = await getOne<CachedImage>("images", key);
 
-    if (exists?.blob) {
-      successCount++;
-      notifyStatsUpdate();
-      continue;
-    }
-
-    try {
-      let blob: Blob;
-      try {
-        // Try getting signed URL for the thumbnail key first
-        const res = await signedImageUrl({ data: { path: key } });
-        const img = await fetch(res.url);
-        if (!img.ok) throw new Error("Thumbnail fetch failed");
-        blob = await img.blob();
-      } catch (thumbErr) {
-        console.warn(
-          `[Offline Cache] Thumbnail file ${key} not found in storage, falling back to full image ${item.path}:`,
-          thumbErr,
-        );
-        // Fallback to downloading the full image
-        const res = await signedImageUrl({ data: { path: item.path } });
-        const img = await fetch(res.url);
-        if (!img.ok) throw new Error("Full image fetch failed");
-        blob = await img.blob();
+      if (exists?.blob) {
+        successCount++;
+        notifyStatsUpdate();
+        continue;
       }
 
-      await cacheImage(key, blob, item.id, "thumb");
-      successCount++;
-      notifyStatsUpdate();
+      try {
+        let blob: Blob;
+        try {
+          // Try getting signed URL for the thumbnail key first
+          const res = await signedImageUrl({ data: { path: key } });
+          const img = await fetchWithTimeout(res.url, {}, 8000);
+          if (!img.ok) throw new Error("Thumbnail fetch failed");
+          blob = await img.blob();
+        } catch (thumbErr) {
+          console.warn(
+            `[Offline Cache] Thumbnail file ${key} not found in storage, falling back to full image ${item.path}:`,
+            thumbErr,
+          );
+          // Fallback to downloading the full image
+          const res = await signedImageUrl({ data: { path: item.path } });
+          const img = await fetchWithTimeout(res.url, {}, 8000);
+          if (!img.ok) throw new Error("Full image fetch failed");
+          blob = await img.blob();
+        }
 
-      // Delay to avoid UI blocking
-      await new Promise((resolve) => setTimeout(resolve, 200));
-    } catch (err) {
-      console.error(`[Offline Cache] Failed to preload thumbnail for product ${item.id}:`, err);
-      failedCount++;
+        await cacheImage(key, blob, item.id, "thumb");
+        successCount++;
+        notifyStatsUpdate();
+
+        // Delay to avoid UI blocking
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      } catch (err) {
+        console.error(`[Offline Cache] Failed to preload thumbnail for product ${item.id}:`, err);
+        failedCount++;
+      }
     }
-  }
+  } finally {
+    isPreloading = false;
 
-  isPreloading = false;
-
-  if (failedCount > 0 && successCount === 0) {
-    await updateCacheStatus("Failed");
-    console.error(
-      `[Offline Cache] Full catalog sync completion: FAILED (${successCount} cached, ${failedCount} failed)`,
-    );
-  } else {
-    await updateCacheStatus("Complete");
-    const completionTime = new Date().toISOString();
-    await tx("meta", "readwrite", async (store) => {
-      store.put({ key: "fullSyncCompletionTime", value: completionTime });
-    });
-    try {
-      await setDexieMeta("fullSyncCompletionTime", completionTime);
-    } catch (e) {
-      console.warn("[Offline Cache] Failed to update Dexie fullSyncCompletionTime:", e);
+    if (failedCount > 0 && successCount === 0) {
+      await updateCacheStatus("Failed");
+      console.error(
+        `[Offline Cache] Full catalog sync completion: FAILED (${successCount} cached, ${failedCount} failed)`,
+      );
+    } else {
+      await updateCacheStatus("Complete");
+      const completionTime = new Date().toISOString();
+      await tx("meta", "readwrite", async (store) => {
+        store.put({ key: "fullSyncCompletionTime", value: completionTime });
+      });
+      try {
+        await setDexieMeta("fullSyncCompletionTime", completionTime);
+      } catch (e) {
+        console.warn("[Offline Cache] Failed to update Dexie fullSyncCompletionTime:", e);
+      }
+      console.log(
+        `[Offline Cache] Full catalog sync completion: SUCCESS. Completion time: ${completionTime}`,
+      );
     }
-    console.log(
-      `[Offline Cache] Full catalog sync completion: SUCCESS. Completion time: ${completionTime}`,
-    );
+    notifyStatsUpdate();
   }
-  notifyStatsUpdate();
 }
 
-async function updateCacheStatus(status: CacheStats["status"]) {
+export async function updateCacheStatus(status: CacheStats["status"]) {
   await tx("meta", "readwrite", async (store) => {
     store.put({ key: "cacheStatus", value: status });
   });

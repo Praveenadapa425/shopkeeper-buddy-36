@@ -82,10 +82,12 @@ async function executeOp(op: MutationOp): Promise<void> {
       const { data, error } = await supabase
         .from("categories")
         .insert({ name: op.newCategoryName })
-        .select("id")
+        .select("id, name")
         .single();
       if (error) throw error;
       categoryId = data.id;
+      // Write new category locally to Dexie immediately
+      await db().categories.put({ id: data.id, name: data.name });
     }
     const { data: u } = await supabase.auth.getUser();
     const { data, error } = await supabase
@@ -100,22 +102,34 @@ async function executeOp(op: MutationOp): Promise<void> {
         low_stock_threshold: op.product.low_stock_threshold,
         created_by: u.user?.id ?? null,
       })
-      .select("id")
+      .select("id, name, image_url, stock_qty, selling_price, cost_price, low_stock_threshold, category_id, created_at, updated_at")
       .single();
     if (error) throw error;
     const productId = data.id;
+
+    // Immediately put the real product in Dexie with _dirty: 0
+    await db().products.put({ ...data, _dirty: 0 } as CachedProduct);
+
     if (op.variants.length) {
-      const { error: vErr } = await supabase.from("product_variants").insert(
-        op.variants.map((v, i) => ({
-          product_id: productId,
-          value: v.value,
-          cost_price: v.cost_price,
-          selling_price: v.selling_price,
-          stock_quantity: v.stock_quantity,
-          sort_order: v.sort_order ?? i,
-        })),
-      );
+      const { data: varData, error: vErr } = await supabase
+        .from("product_variants")
+        .insert(
+          op.variants.map((v, i) => ({
+            product_id: productId,
+            value: v.value,
+            cost_price: v.cost_price,
+            selling_price: v.selling_price,
+            stock_quantity: v.stock_quantity,
+            sort_order: v.sort_order ?? i,
+          })),
+        )
+        .select("id, product_id, value, cost_price, selling_price, stock_quantity, sort_order");
       if (vErr) throw vErr;
+      if (varData) {
+        await db().variants.bulkPut(
+          varData.map((v) => ({ ...v, _dirty: 0 }))
+        );
+      }
     }
     // Reconcile temp id in local cache
     await db().transaction("rw", db().products, db().variants, async () => {
@@ -128,21 +142,30 @@ async function executeOp(op: MutationOp): Promise<void> {
       const { data, error } = await supabase
         .from("categories")
         .insert({ name: op.newCategoryName })
-        .select("id")
+        .select("id, name")
         .single();
       if (error) throw error;
       categoryId = data.id;
+      // Write new category locally to Dexie immediately
+      await db().categories.put({ id: data.id, name: data.name });
     }
     const { _dirty: _d, _deleted: _x, ...rest } = op.patch;
     void _d;
     void _x;
     const patch: Record<string, unknown> = { ...rest };
     if (categoryId !== undefined) patch.category_id = categoryId;
-    const { error } = await supabase
+    const { data: updatedProduct, error } = await supabase
       .from("products")
       .update(patch as never)
-      .eq("id", op.id);
+      .eq("id", op.id)
+      .select("id, name, image_url, stock_qty, selling_price, cost_price, low_stock_threshold, category_id, created_at, updated_at")
+      .single();
     if (error) throw error;
+
+    // Immediately put updated product in Dexie with _dirty: 0
+    if (updatedProduct) {
+      await db().products.put({ ...updatedProduct, _dirty: 0 } as CachedProduct);
+    }
 
     if (op.variants) {
       const keep = op.variants.keep;
@@ -161,11 +184,36 @@ async function executeOp(op: MutationOp): Promise<void> {
         sort_order: i,
       }));
       if (rows.length) {
-        const { error: uErr } = await supabase
+        const { data: updatedVars, error: uErr } = await supabase
           .from("product_variants")
-          .upsert(rows, { onConflict: "id" });
+          .upsert(rows, { onConflict: "id" })
+          .select("id, product_id, value, cost_price, selling_price, stock_quantity, sort_order");
         if (uErr) throw uErr;
+        if (updatedVars) {
+          // Reconcile variants in local Dexie cache, deleting any deleted ones and writing updated ones with _dirty: 0
+          await db().transaction("rw", db().variants, async () => {
+            const serverVarIds = new Set(updatedVars.map((v) => v.id));
+            const existingVars = await db().variants.where("product_id").equals(op.id).toArray();
+            for (const ev of existingVars) {
+              if (!serverVarIds.has(ev.id)) {
+                await db().variants.delete(ev.id);
+              }
+            }
+            await db().variants.bulkPut(updatedVars.map((v) => ({ ...v, _dirty: 0 })));
+          });
+        }
       }
+    } else {
+      // If op.variants was not provided, still clear _dirty for this product's existing variants
+      await db().transaction("rw", db().variants, async () => {
+        const existingVars = await db().variants.where("product_id").equals(op.id).toArray();
+        for (const ev of existingVars) {
+          if (ev._dirty) {
+            ev._dirty = 0;
+            await db().variants.put(ev);
+          }
+        }
+      });
     }
   } else if (op.kind === "delete_product") {
     const { error } = await supabase.from("products").delete().eq("id", op.id);
