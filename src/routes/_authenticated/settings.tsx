@@ -40,10 +40,13 @@ function SettingsPage() {
   const isAdmin = roles.includes("admin");
 
   const handleSave = async () => {
+    // console.log("HANDLE SAVE CLICKED");
     if (next.length !== 4) return;
     setSaving(true);
     try {
       const res = await updatePin({ data: { currentPin: current || undefined, newPin: next } });
+      // console.log("SUPABASE URL:", import.meta.env.VITE_SUPABASE_URL);
+      // console.log("PIN RESULT:", res);
       if (!res.ok) {
         toast.error(res.error === "wrong_pin" ? t("wrong_pin") : res.error);
       } else {
@@ -60,7 +63,7 @@ function SettingsPage() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-2xl font-bold">{t("settings")}</h1>
+      <h1 className="text-2xl font-bold">{t("settings Test")}</h1>
 
       <Card className="space-y-3 p-5">
         <div className="flex items-center gap-3">

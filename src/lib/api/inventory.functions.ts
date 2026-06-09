@@ -51,6 +51,7 @@ export async function verifyAdminPin({ data }: { data: { pin: string } }) {
   if (!settings?.admin_pin_hash) {
     return { ok: false as const, error: "PIN not set. Set an Admin PIN in Settings." };
   }
+  
   const incoming = await sha256Hex(data.pin);
   if (incoming !== settings.admin_pin_hash) {
     return { ok: false as const, error: "wrong_pin" };
@@ -91,12 +92,38 @@ export async function setAdminPin({ data }: { data: { currentPin?: string; newPi
   }
 
   const newHash = await sha256Hex(data.newPin);
-  const { error: upErr } = await supabase
-    .from("app_settings")
-    .update({ admin_pin_hash: newHash, updated_at: new Date().toISOString() })
-    .eq("id", 1);
-  if (upErr) throw new Error(upErr.message);
-  return { ok: true as const };
+
+const result = await supabase
+  .from("app_settings")
+  .update({
+    admin_pin_hash: newHash,
+    updated_at: new Date().toISOString(),
+  })
+  .eq("id", 1)
+  .select();
+
+// console.log("UPDATE RESULT:", result);
+
+if (!result.data || result.data.length === 0) {
+  return {
+    ok: false as const,
+    error: "No rows updated",
+  };
+}
+
+if (result.error) {
+  throw new Error(result.error.message);
+}
+
+return { ok: true as const };
+
+  // const newHash = await sha256Hex(data.newPin);
+  // const { error: upErr } = await supabase
+  //   .from("app_settings")
+  //   .update({ admin_pin_hash: newHash, updated_at: new Date().toISOString() })
+  //   .eq("id", 1);
+  // if (upErr) throw new Error(upErr.message);
+  // return { ok: true as const };
 }
 
 /** Returns a short-lived signed URL for a stored product image path. */
