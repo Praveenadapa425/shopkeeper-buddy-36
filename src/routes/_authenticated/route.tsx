@@ -1,11 +1,14 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
 import { EditUnlockProvider } from "@/lib/editUnlock";
 import { useRealtimeSync } from "@/lib/useRealtimeSync";
+import { startSyncWatcher } from "@/lib/offline/queue";
 
 function AuthenticatedLayout() {
   useRealtimeSync();
+  useEffect(() => startSyncWatcher(), []);
   return (
     <EditUnlockProvider>
       <AppShell>
@@ -24,4 +27,3 @@ export const Route = createFileRoute("/_authenticated")({
   },
   component: AuthenticatedLayout,
 });
-
