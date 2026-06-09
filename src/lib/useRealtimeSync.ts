@@ -37,6 +37,15 @@ export function useRealtimeSync() {
           qc.invalidateQueries({ queryKey: ["categories"] });
         },
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "inventory_stock" },
+        () => {
+          qc.invalidateQueries({ queryKey: ["products"] });
+          qc.invalidateQueries({ queryKey: ["products-stats"] });
+          qc.invalidateQueries({ queryKey: ["inventory-stock"] });
+        },
+      )
       .subscribe();
 
     return () => {

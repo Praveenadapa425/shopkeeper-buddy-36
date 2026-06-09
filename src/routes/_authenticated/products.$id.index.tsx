@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { ProductImage } from "@/components/ProductImage";
 import { ArrowLeft, Pencil } from "lucide-react";
 import { fetchCategory, fetchProduct, fetchVariants } from "@/lib/offline/cache";
+import { isOnline } from "@/lib/offlineCache";
 
 
 export const Route = createFileRoute("/_authenticated/products/$id/")({
@@ -50,7 +51,11 @@ function ProductDetailsPage() {
         <Button variant="ghost" size="sm" onClick={() => nav({ to: "/products" })} className="gap-1 -ml-2">
           <ArrowLeft className="h-5 w-5" /> {t("products")}
         </Button>
-        <Card className="p-8 text-center text-muted-foreground">{t("no_products")}</Card>
+        <Card className="p-8 text-center text-muted-foreground">
+          {!isOnline()
+            ? "Connect to the internet once to sync this product for offline viewing."
+            : t("no_products")}
+        </Card>
       </div>
     );
   }

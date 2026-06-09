@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Package } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import { signedImageUrl } from "@/lib/api/inventory.functions";
+import { cacheImage, getCachedImage, isOnline } from "@/lib/offlineCache";
 
 /** Build the thumbnail storage path from a full-image path. */
 export function thumbPathFor(path: string | null): string | null {
@@ -31,30 +32,89 @@ export function ProductImage({
 
   useEffect(() => {
     let active = true;
+    let objectUrl: string | null = null;
     setLoaded(false);
     setUrl(null);
     if (!path) return;
 
     const wantThumb = variant === "thumb";
     const primary = wantThumb ? `thumb_${path}` : path;
+    const secondary = wantThumb ? path : `thumb_${path}`;
 
-    sign({ data: { path: primary } })
-      .then((res) => {
-        if (active) setUrl(res.url);
-      })
-      .catch(() => {
-        // Fallback: if thumb missing, try full image
-        if (!active || !wantThumb) {
-          if (active) setUrl(null);
+    const setBlobUrl = (blob: Blob) => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      objectUrl = URL.createObjectURL(blob);
+      if (active) setUrl(objectUrl);
+    };
+
+    const loadCached = async (key: string) => {
+      const cached = await getCachedImage(key);
+      if (cached && active) {
+        setBlobUrl(cached);
+        return true;
+      }
+      return false;
+    };
+
+    const loadRemote = async (key: string) => {
+      const res = await sign({ data: { path: key } });
+      const img = await fetch(res.url);
+      if (!img.ok) throw new Error("Image fetch failed");
+      const blob = await img.blob();
+      
+      const type = key.startsWith("thumb_") ? "thumb" : "full";
+      await cacheImage(key, blob, undefined, type);
+      if (active) setBlobUrl(blob);
+    };
+
+    const run = async () => {
+      if (!isOnline()) {
+        const found = await loadCached(primary);
+        if (!found) {
+          console.log(`[Offline Cache] Offline image missing for primary key: ${primary}. Trying fallback...`);
+          const foundSec = await loadCached(secondary);
+          if (foundSec) {
+            console.log(`[Offline Cache] Thumbnail fallback usage: successfully fell back to key ${secondary}`);
+          }
+        }
+        return;
+      }
+
+      try {
+        await loadRemote(primary);
+      } catch {
+        const found = await loadCached(primary);
+        if (found) return;
+        
+        console.log(`[Offline Cache] Remote load failed for primary key: ${primary}. Trying fallback...`);
+        const foundSec = await loadCached(secondary);
+        if (foundSec) {
+          console.log(`[Offline Cache] Thumbnail fallback usage: successfully fell back to key ${secondary}`);
           return;
         }
-        sign({ data: { path } })
-          .then((res) => active && setUrl(res.url))
-          .catch(() => active && setUrl(null));
-      });
+
+        try {
+          const res = await sign({ data: { path: secondary } });
+          const img = await fetch(res.url);
+          if (!img.ok) throw new Error("Fallback image fetch failed");
+          const blob = await img.blob();
+          
+          const primaryType = primary.startsWith("thumb_") ? "thumb" : "full";
+          const secondaryType = secondary.startsWith("thumb_") ? "thumb" : "full";
+          await cacheImage(secondary, blob, undefined, secondaryType);
+          await cacheImage(primary, blob, undefined, primaryType);
+          if (active) setBlobUrl(blob);
+        } catch {
+          // Ignore
+        }
+      }
+    };
+
+    void run();
 
     return () => {
       active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [path, variant, sign]);
 

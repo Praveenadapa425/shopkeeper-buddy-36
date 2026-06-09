@@ -21,9 +21,25 @@ function AuthenticatedLayout() {
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async () => {
-    const { data, error } = await supabase.auth.getUser();
-    if (error || !data.user) throw redirect({ to: "/auth" });
-    return { user: data.user };
+    try {
+      const { data, error } = await supabase.auth.getUser();
+      if (!error && data.user) {
+        return { user: data.user };
+      }
+    } catch (err) {
+      // Ignore network errors when offline
+    }
+
+    try {
+      const { data } = await supabase.auth.getSession();
+      if (data.session?.user) {
+        return { user: data.session.user };
+      }
+    } catch (err) {
+      // Ignore
+    }
+
+    throw redirect({ to: "/auth" });
   },
   component: AuthenticatedLayout,
 });

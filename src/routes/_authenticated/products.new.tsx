@@ -104,6 +104,9 @@ export function ProductForm({ mode }: { mode: Mode }) {
     try {
       // Optimize: WebP if possible, resize to <=1600px, target <=1MB.
       const full = await optimizeFullImage(file);
+      if (full.blob.size > 1024 * 1024) {
+        throw new Error("Image must be 1 MB or smaller after compression.");
+      }
       const thumb = await generateThumbnail(full.blob);
       const id = crypto.randomUUID();
       const path = `${id}.${full.ext}`;

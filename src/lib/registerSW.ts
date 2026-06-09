@@ -42,9 +42,20 @@ export function registerAppServiceWorker() {
     return;
   }
   if (!("serviceWorker" in navigator)) return;
+
+  // Reload the page when the service worker takes control (claims clients) to load matching route chunks
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    console.log("[Service Worker] Controller changed. Reloading page to apply updates...");
+    window.location.reload();
+  });
+
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register(SW_URL).catch(() => {
-      /* ignore */
+    navigator.serviceWorker.register(SW_URL).then((reg) => {
+      console.log("[Service Worker] Registered successfully.");
+      // Force check for updates on registration
+      void reg.update();
+    }).catch((err) => {
+      console.error("[Service Worker] Registration failed:", err);
     });
   });
 }

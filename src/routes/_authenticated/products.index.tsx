@@ -10,22 +10,13 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ProductImage } from "@/components/ProductImage";
 import { Plus, Search, Eye, Pencil } from "lucide-react";
-import { fetchCategories, fetchProducts } from "@/lib/offline/cache";
+import { fetchCategories, fetchProducts, type ProductRow } from "@/lib/offline/cache";
+import { isOnline, queueThumbnailPreload } from "@/lib/offlineCache";
 
 
 export const Route = createFileRoute("/_authenticated/products/")({
   component: ProductsPage,
 });
-
-type Product = {
-  id: string;
-  name: string;
-  image_url: string | null;
-  stock_qty: number;
-  selling_price: number;
-  low_stock_threshold: number;
-  category_id: string | null;
-};
 
 function ProductsPage() {
   const { t } = useI18n();
@@ -42,7 +33,11 @@ function ProductsPage() {
 
   const { data: products = [], isLoading } = useQuery({
     queryKey: ["products"],
-    queryFn: fetchProducts,
+    queryFn: async () => {
+      const rows = await fetchProducts();
+      void queueThumbnailPreload(rows);
+      return rows;
+    },
   });
 
 
@@ -88,7 +83,11 @@ function ProductsPage() {
       {isLoading ? (
         <p className="py-8 text-center text-muted-foreground">{t("loading")}</p>
       ) : filtered.length === 0 ? (
-        <Card className="p-8 text-center text-muted-foreground">{t("no_products")}</Card>
+        <Card className="p-8 text-center text-muted-foreground">
+          {!isOnline() && products.length === 0
+            ? "Connect to the internet once to sync your products for offline viewing."
+            : t("no_products")}
+        </Card>
       ) : (
         <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {filtered.map((p) => (
@@ -148,7 +147,7 @@ function CatChip({ active, onClick, children }: { active: boolean; onClick: () =
   );
 }
 
-function PriceLine({ product }: { product: Product & { product_variants?: { selling_price: number; sort_order: number }[] } }) {
+function PriceLine({ product }: { product: ProductRow }) {
   const variants = (product.product_variants ?? []).slice().sort((a, b) => a.sort_order - b.sort_order);
   const first = variants[0]?.selling_price ?? product.selling_price;
   return <p className="text-lg font-bold text-primary">{formatINR(Number(first))}</p>;
@@ -160,4 +159,3 @@ function StockBadge({ qty, threshold }: { qty: number; threshold: number }) {
   if (qty <= threshold) return <Badge className="bg-warning text-warning-foreground hover:bg-warning">{qty} · {t("low_stock")}</Badge>;
   return <Badge variant="secondary">{qty} {t("units")}</Badge>;
 }
-

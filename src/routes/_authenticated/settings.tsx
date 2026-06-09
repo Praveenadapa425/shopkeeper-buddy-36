@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { toast } from "sonner";
-import { ShieldCheck, Languages, User } from "lucide-react";
+import { ShieldCheck, Languages, User, Database } from "lucide-react";
+import { subscribeCacheStats, type CacheStats } from "@/lib/offlineCache";
 
 export const Route = createFileRoute("/_authenticated/settings")({
   component: SettingsPage,
@@ -20,12 +21,21 @@ function SettingsPage() {
   const [next, setNext] = useState("");
   const [saving, setSaving] = useState(false);
   const [roles, setRoles] = useState<string[]>([]);
+  const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
   const updatePin = useServerFn(setAdminPin);
   const myRole = useServerFn(getMyRole);
 
   useEffect(() => {
     myRole().then((r) => setRoles(r.roles)).catch(() => {});
   }, [myRole]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeCacheStats((stats) => {
+      setCacheStats(stats);
+      console.log("[Offline Cache] Cache statistics updates shown in Settings:", stats);
+    });
+    return () => unsubscribe();
+  }, []);
 
   const isAdmin = roles.includes("admin");
 
@@ -62,6 +72,71 @@ function SettingsPage() {
             <p className="font-semibold">{isAdmin ? t("admin") : roles.includes("owner") ? t("owner") : "—"}</p>
           </div>
         </div>
+      </Card>
+
+      <Card className="space-y-4 p-5">
+        <div className="flex items-center gap-3">
+          <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary/10 text-primary">
+            <Database className="h-5 w-5" />
+          </div>
+          <h2 className="text-lg font-semibold">Offline Sync</h2>
+        </div>
+
+        {cacheStats && (
+          <div className="space-y-3 text-sm">
+            <div className="flex justify-between border-b border-border/50 pb-2">
+              <span className="text-muted-foreground">Online / Offline Status</span>
+              <span className={`font-semibold ${cacheStats.online ? "text-emerald-600" : "text-destructive"}`}>
+                {cacheStats.online ? "Online" : "Offline"}
+              </span>
+            </div>
+
+            <div className="flex justify-between border-b border-border/50 pb-2">
+              <span className="text-muted-foreground">Cache Status</span>
+              <span className={`font-semibold ${
+                cacheStats.status === "Complete" ? "text-emerald-600" :
+                cacheStats.status === "In Progress" ? "text-amber-500 animate-pulse" :
+                cacheStats.status === "Failed" ? "text-destructive" : "text-muted-foreground"
+              }`}>
+                {cacheStats.status}
+              </span>
+            </div>
+
+            <div className="flex justify-between border-b border-border/50 pb-2">
+              <span className="text-muted-foreground">Products Cached</span>
+              <span className="font-semibold">{cacheStats.productsCached} / {cacheStats.totalProducts}</span>
+            </div>
+
+            <div className="flex justify-between border-b border-border/50 pb-2">
+              <span className="text-muted-foreground">Images Cached</span>
+              <span className="font-semibold">{cacheStats.imagesCached} / {cacheStats.totalImages}</span>
+            </div>
+
+            <div className="flex justify-between border-b border-border/50 pb-2">
+              <span className="text-muted-foreground">Number of Cached Products</span>
+              <span className="font-semibold">{cacheStats.productsCached}</span>
+            </div>
+
+            <div className="flex justify-between border-b border-border/50 pb-2">
+              <span className="text-muted-foreground">Number of Cached Images</span>
+              <span className="font-semibold">{cacheStats.imagesCached}</span>
+            </div>
+
+            <div className="flex justify-between border-b border-border/50 pb-2">
+              <span className="text-muted-foreground">Last Successful Sync Time</span>
+              <span className="font-medium text-right">
+                {cacheStats.lastSyncTime ? new Date(cacheStats.lastSyncTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + " " + new Date(cacheStats.lastSyncTime).toLocaleDateString() : "Never"}
+              </span>
+            </div>
+
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Last Full Catalog Cache Completion Time</span>
+              <span className="font-medium text-right">
+                {cacheStats.completionTime ? new Date(cacheStats.completionTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + " " + new Date(cacheStats.completionTime).toLocaleDateString() : "Never"}
+              </span>
+            </div>
+          </div>
+        )}
       </Card>
 
       <Card className="space-y-4 p-5">

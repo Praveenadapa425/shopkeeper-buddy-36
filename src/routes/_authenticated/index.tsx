@@ -7,6 +7,7 @@ import { formatINR, formatNumber } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { CostPriceReveal } from "@/components/CostPriceReveal";
 import { Package, Boxes, IndianRupee, TrendingUp, AlertTriangle } from "lucide-react";
+import { cacheProducts, cacheStock, getCachedProducts, isOnline, queueThumbnailPreload } from "@/lib/offlineCache";
 
 export const Route = createFileRoute("/_authenticated/")({
   component: Dashboard,
@@ -27,11 +28,24 @@ function Dashboard() {
   const { data: products = [], isLoading } = useQuery({
     queryKey: ["products-stats"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("products")
-        .select("id, name, stock_qty, selling_price, low_stock_threshold");
-      if (error) throw error;
-      return (data ?? []) as ProductRow[];
+      if (!isOnline()) return getCachedProducts() as Promise<ProductRow[]>;
+      try {
+        const { data, error } = await supabase
+          .from("products")
+          .select("id, name, category_id, image_url, stock_qty, selling_price, low_stock_threshold, created_at, updated_at");
+        if (error) throw error;
+        await cacheProducts(data ?? []);
+        void queueThumbnailPreload(data ?? []);
+        void supabase
+          .from("inventory_stock")
+          .select("id, product_id, variant_id, quantity, location, updated_at")
+          .then(({ data: stock }) => stock && cacheStock(stock));
+        return (data ?? []) as ProductRow[];
+      } catch (error) {
+        const cached = await getCachedProducts();
+        if (cached.length > 0) return cached as ProductRow[];
+        throw error;
+      }
     },
   });
 
@@ -102,6 +116,12 @@ function Dashboard() {
               </li>
             ))}
           </ul>
+        </Card>
+      )}
+
+      {!isLoading && products.length === 0 && !isOnline() && (
+        <Card className="p-4 text-center text-sm text-muted-foreground">
+          Connect to the internet once to sync your inventory for offline viewing.
         </Card>
       )}
     </div>
