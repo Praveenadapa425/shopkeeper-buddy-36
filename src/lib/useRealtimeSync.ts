@@ -12,40 +12,24 @@ export function useRealtimeSync() {
   useEffect(() => {
     const channel = supabase
       .channel("inventory-sync")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "products" },
-        () => {
-          qc.invalidateQueries({ queryKey: ["products"] });
-          qc.invalidateQueries({ queryKey: ["products-stats"] });
-          qc.invalidateQueries({ queryKey: ["product"] });
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "product_variants" },
-        () => {
-          qc.invalidateQueries({ queryKey: ["products"] });
-          qc.invalidateQueries({ queryKey: ["products-stats"] });
-          qc.invalidateQueries({ queryKey: ["product-variants"] });
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "categories" },
-        () => {
-          qc.invalidateQueries({ queryKey: ["categories"] });
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "inventory_stock" },
-        () => {
-          qc.invalidateQueries({ queryKey: ["products"] });
-          qc.invalidateQueries({ queryKey: ["products-stats"] });
-          qc.invalidateQueries({ queryKey: ["inventory-stock"] });
-        },
-      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "products" }, () => {
+        qc.invalidateQueries({ queryKey: ["products"] });
+        qc.invalidateQueries({ queryKey: ["products-stats"] });
+        qc.invalidateQueries({ queryKey: ["product"] });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "product_variants" }, () => {
+        qc.invalidateQueries({ queryKey: ["products"] });
+        qc.invalidateQueries({ queryKey: ["products-stats"] });
+        qc.invalidateQueries({ queryKey: ["product-variants"] });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "categories" }, () => {
+        qc.invalidateQueries({ queryKey: ["categories"] });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "inventory_stock" }, () => {
+        qc.invalidateQueries({ queryKey: ["products"] });
+        qc.invalidateQueries({ queryKey: ["products-stats"] });
+        qc.invalidateQueries({ queryKey: ["inventory-stock"] });
+      })
       .subscribe();
 
     return () => {

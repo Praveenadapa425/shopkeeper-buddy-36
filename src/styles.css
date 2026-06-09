@@ -46,13 +46,13 @@
   --card-foreground: oklch(0.22 0.03 260);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.22 0.03 260);
-  --primary: oklch(0.55 0.18 28);            /* warm saffron-red */
+  --primary: oklch(0.55 0.18 28); /* warm saffron-red */
   --primary-foreground: oklch(0.99 0.01 95);
   --secondary: oklch(0.95 0.02 80);
   --secondary-foreground: oklch(0.3 0.05 60);
   --muted: oklch(0.96 0.01 95);
   --muted-foreground: oklch(0.5 0.03 260);
-  --accent: oklch(0.7 0.16 145);             /* fresh green */
+  --accent: oklch(0.7 0.16 145); /* fresh green */
   --accent-foreground: oklch(0.99 0.01 95);
   --destructive: oklch(0.55 0.22 27);
   --destructive-foreground: oklch(0.99 0.01 95);
@@ -92,8 +92,13 @@
 }
 
 @layer base {
-  * { border-color: var(--color-border); }
-  html, body { -webkit-tap-highlight-color: transparent; }
+  * {
+    border-color: var(--color-border);
+  }
+  html,
+  body {
+    -webkit-tap-highlight-color: transparent;
+  }
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
@@ -102,10 +107,21 @@
     line-height: 1.5;
     overscroll-behavior-y: none;
   }
-  button, [role="button"] { touch-action: manipulation; }
-  input, select, textarea { font-size: 16px; } /* prevent iOS zoom */
+  button,
+  [role="button"] {
+    touch-action: manipulation;
+  }
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  } /* prevent iOS zoom */
 }
 
 /* Utility helpers */
-.safe-bottom { padding-bottom: max(env(safe-area-inset-bottom), 0.75rem); }
-.safe-top { padding-top: max(env(safe-area-inset-top), 0.5rem); }
+.safe-bottom {
+  padding-bottom: max(env(safe-area-inset-bottom), 0.75rem);
+}
+.safe-top {
+  padding-top: max(env(safe-area-inset-top), 0.5rem);
+}

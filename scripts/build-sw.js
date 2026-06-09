@@ -9,9 +9,7 @@ const buildSW = async () => {
     modifyURLPrefix: {
       "": "/",
     },
-    additionalManifestEntries: [
-      { url: "/", revision: new Date().getTime().toString() },
-    ],
+    additionalManifestEntries: [{ url: "/", revision: new Date().getTime().toString() }],
   });
   console.log(`Service worker generated: ${count} files precached (${size} bytes)`);
 };

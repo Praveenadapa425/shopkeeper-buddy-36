@@ -28,11 +28,24 @@ export function OnlineStatus() {
 
   const cfg =
     status === "offline"
-      ? { Icon: CloudOff, label: t("status_offline"), cls: "bg-destructive text-destructive-foreground" }
+      ? {
+          Icon: CloudOff,
+          label: t("status_offline"),
+          cls: "bg-destructive text-destructive-foreground",
+        }
       : status === "syncing"
-        ? { Icon: RefreshCw, label: `${t("status_syncing")}${pending > 0 ? ` (${pending})` : ""}`, cls: "bg-amber-500 text-white", spin: true }
+        ? {
+            Icon: RefreshCw,
+            label: `${t("status_syncing")}${pending > 0 ? ` (${pending})` : ""}`,
+            cls: "bg-amber-500 text-white",
+            spin: true,
+          }
         : status === "synced"
-          ? { Icon: Check, label: `${t("status_synced")} · ${formatAgo(lastSync)}`, cls: "bg-emerald-600 text-white" }
+          ? {
+              Icon: Check,
+              label: `${t("status_synced")} · ${formatAgo(lastSync)}`,
+              cls: "bg-emerald-600 text-white",
+            }
           : { Icon: Cloud, label: t("status_online"), cls: "bg-emerald-600 text-white" };
 
   const Icon = cfg.Icon;

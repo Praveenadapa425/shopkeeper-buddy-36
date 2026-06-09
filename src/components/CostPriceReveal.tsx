@@ -2,7 +2,13 @@ import { useState } from "react";
 import { useServerFn } from "@/lib/useServerFn";
 import { Eye, EyeOff, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { revealCostPrices } from "@/lib/api/inventory.functions";
 import { useI18n } from "@/lib/i18n";

@@ -13,7 +13,6 @@ import { Plus, Search, Eye, Pencil } from "lucide-react";
 import { fetchCategories, fetchProducts, type ProductRow } from "@/lib/offline/cache";
 import { isOnline, queueThumbnailPreload } from "@/lib/offlineCache";
 
-
 export const Route = createFileRoute("/_authenticated/products/")({
   component: ProductsPage,
 });
@@ -24,7 +23,6 @@ function ProductsPage() {
   const { requireEdit } = useEditUnlock();
   const [q, setQ] = useState("");
   const [cat, setCat] = useState<string>("all");
-
 
   const { data: cats = [] } = useQuery({
     queryKey: ["categories"],
@@ -39,7 +37,6 @@ function ProductsPage() {
       return rows;
     },
   });
-
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -72,7 +69,9 @@ function ProductsPage() {
       </div>
 
       <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-        <CatChip active={cat === "all"} onClick={() => setCat("all")}>{t("all_categories")}</CatChip>
+        <CatChip active={cat === "all"} onClick={() => setCat("all")}>
+          {t("all_categories")}
+        </CatChip>
         {cats.map((c) => (
           <CatChip key={c.id} active={cat === c.id} onClick={() => setCat(c.id)}>
             {c.name}
@@ -100,14 +99,18 @@ function ProductsPage() {
                   aria-label={`${t("view")} ${p.name}`}
                 >
                   <div className="aspect-square w-full bg-muted">
-                    <ProductImage path={p.image_url} alt={p.name} variant="thumb" className="h-full w-full" />
+                    <ProductImage
+                      path={p.image_url}
+                      alt={p.name}
+                      variant="thumb"
+                      className="h-full w-full"
+                    />
                   </div>
                   <div className="space-y-1 p-3">
                     <p className="truncate text-base font-semibold">{p.name}</p>
                     <PriceLine product={p} />
                     <StockBadge qty={p.stock_qty} threshold={p.low_stock_threshold} />
                   </div>
-
                 </Link>
                 <div className="flex gap-2 border-t p-2">
                   <Button asChild variant="ghost" size="sm" className="flex-1 gap-1.5">
@@ -119,11 +122,12 @@ function ProductsPage() {
                     variant="ghost"
                     size="sm"
                     className="flex-1 gap-1.5"
-                    onClick={() => requireEdit(() => nav({ to: "/products/$id/edit", params: { id: p.id } }))}
+                    onClick={() =>
+                      requireEdit(() => nav({ to: "/products/$id/edit", params: { id: p.id } }))
+                    }
                   >
                     <Pencil className="h-4 w-4" /> {t("edit")}
                   </Button>
-
                 </div>
               </Card>
             </li>
@@ -134,7 +138,15 @@ function ProductsPage() {
   );
 }
 
-function CatChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+function CatChip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
   return (
     <button
       onClick={onClick}
@@ -148,7 +160,9 @@ function CatChip({ active, onClick, children }: { active: boolean; onClick: () =
 }
 
 function PriceLine({ product }: { product: ProductRow }) {
-  const variants = (product.product_variants ?? []).slice().sort((a, b) => a.sort_order - b.sort_order);
+  const variants = (product.product_variants ?? [])
+    .slice()
+    .sort((a, b) => a.sort_order - b.sort_order);
   const first = variants[0]?.selling_price ?? product.selling_price;
   return <p className="text-lg font-bold text-primary">{formatINR(Number(first))}</p>;
 }
@@ -156,6 +170,15 @@ function PriceLine({ product }: { product: ProductRow }) {
 function StockBadge({ qty, threshold }: { qty: number; threshold: number }) {
   const { t } = useI18n();
   if (qty <= 0) return <Badge variant="destructive">{t("out_of_stock")}</Badge>;
-  if (qty <= threshold) return <Badge className="bg-warning text-warning-foreground hover:bg-warning">{qty} · {t("low_stock")}</Badge>;
-  return <Badge variant="secondary">{qty} {t("units")}</Badge>;
+  if (qty <= threshold)
+    return (
+      <Badge className="bg-warning text-warning-foreground hover:bg-warning">
+        {qty} · {t("low_stock")}
+      </Badge>
+    );
+  return (
+    <Badge variant="secondary">
+      {qty} {t("units")}
+    </Badge>
+  );
 }

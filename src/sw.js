@@ -16,7 +16,7 @@ if (workbox) {
         console.warn(`[Service Worker] Precache MISS [${cacheName}]: ${request.url}`);
       }
       return cachedResponse;
-    }
+    },
   };
   workbox.precaching.addPlugins([logPrecachePlugin]);
 
@@ -70,7 +70,7 @@ if (workbox) {
         }),
       ],
     }),
-    "html-cache"
+    "html-cache",
   );
 
   workbox.routing.registerRoute(
@@ -86,8 +86,8 @@ if (workbox) {
       },
       {
         denylist: [/^\/api\//, /^\/~oauth/, /^\/_serverFn/],
-      }
-    )
+      },
+    ),
   );
 
   // 2. Supabase Storage Images
@@ -106,8 +106,8 @@ if (workbox) {
           }),
         ],
       }),
-      "supabase-images"
-    )
+      "supabase-images",
+    ),
   );
 
   // 3. Supabase REST Read Operations (StaleWhileRevalidate)
@@ -126,8 +126,8 @@ if (workbox) {
           }),
         ],
       }),
-      "supabase-rest"
-    )
+      "supabase-rest",
+    ),
   );
 
   // 4. Static Assets (Scripts, Styles, Fonts, Workers)
@@ -137,8 +137,8 @@ if (workbox) {
       new workbox.strategies.StaleWhileRevalidate({
         cacheName: "assets",
       }),
-      "assets"
-    )
+      "assets",
+    ),
   );
 
   // 5. Normal Images
@@ -154,8 +154,8 @@ if (workbox) {
           }),
         ],
       }),
-      "images"
-    )
+      "images",
+    ),
   );
 } else {
   console.error("[Service Worker] Workbox failed to load from CDN.");

@@ -50,12 +50,15 @@ export function registerAppServiceWorker() {
   });
 
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register(SW_URL).then((reg) => {
-      console.log("[Service Worker] Registered successfully.");
-      // Force check for updates on registration
-      void reg.update();
-    }).catch((err) => {
-      console.error("[Service Worker] Registration failed:", err);
-    });
+    navigator.serviceWorker
+      .register(SW_URL)
+      .then((reg) => {
+        console.log("[Service Worker] Registered successfully.");
+        // Force check for updates on registration
+        void reg.update();
+      })
+      .catch((err) => {
+        console.error("[Service Worker] Registration failed:", err);
+      });
   });
 }

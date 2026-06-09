@@ -7,7 +7,13 @@ import { formatINR, formatNumber } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { CostPriceReveal } from "@/components/CostPriceReveal";
 import { Package, Boxes, IndianRupee, TrendingUp, AlertTriangle } from "lucide-react";
-import { cacheProducts, cacheStock, getCachedProducts, isOnline, queueThumbnailPreload } from "@/lib/offlineCache";
+import {
+  cacheProducts,
+  cacheStock,
+  getCachedProducts,
+  isOnline,
+  queueThumbnailPreload,
+} from "@/lib/offlineCache";
 
 export const Route = createFileRoute("/_authenticated/")({
   component: Dashboard,
@@ -68,7 +74,9 @@ function Dashboard() {
         />
         <StatCard
           icon={<IndianRupee className="h-5 w-5" />}
-          label={costPrices ? t("inventory_value") : `${t("inventory_value")} (${t("selling_price")})`}
+          label={
+            costPrices ? t("inventory_value") : `${t("inventory_value")} (${t("selling_price")})`
+          }
           value={isLoading ? "…" : formatINR(inventoryValue)}
           tone="warning"
         />
@@ -131,7 +139,9 @@ function StatCard({
   } as const;
   return (
     <Card className="p-4">
-      <div className={`mb-3 grid h-10 w-10 place-items-center rounded-xl ${tones[tone]}`}>{icon}</div>
+      <div className={`mb-3 grid h-10 w-10 place-items-center rounded-xl ${tones[tone]}`}>
+        {icon}
+      </div>
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
       <p className="mt-1 text-xl font-bold tracking-tight">{value}</p>
     </Card>

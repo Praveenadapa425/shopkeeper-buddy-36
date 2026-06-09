@@ -34,8 +34,20 @@ export type CachedCategory = {
 };
 
 export type MutationOp =
-  | { kind: "create_product"; tempId: string; product: Omit<CachedProduct, "id">; variants: Omit<CachedVariant, "id" | "product_id">[]; newCategoryName?: string }
-  | { kind: "update_product"; id: string; patch: Partial<CachedProduct>; variants?: { keep: CachedVariant[] }; newCategoryName?: string }
+  | {
+      kind: "create_product";
+      tempId: string;
+      product: Omit<CachedProduct, "id">;
+      variants: Omit<CachedVariant, "id" | "product_id">[];
+      newCategoryName?: string;
+    }
+  | {
+      kind: "update_product";
+      id: string;
+      patch: Partial<CachedProduct>;
+      variants?: { keep: CachedVariant[] };
+      newCategoryName?: string;
+    }
   | { kind: "delete_product"; id: string };
 
 export type QueuedMutation = {

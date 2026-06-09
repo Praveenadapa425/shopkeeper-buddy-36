@@ -61,13 +61,20 @@ function AuthPage() {
       <div className="w-full max-w-md space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-primary text-2xl font-bold text-primary-foreground">₹</div>
+            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-primary text-2xl font-bold text-primary-foreground">
+              ₹
+            </div>
             <div>
               <h1 className="text-2xl font-bold leading-tight">{t("app_name")}</h1>
               <p className="text-sm text-muted-foreground">{t("tagline")}</p>
             </div>
           </div>
-          <Button variant="ghost" size="sm" onClick={() => setLang(lang === "en" ? "te" : "en")} className="gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setLang(lang === "en" ? "te" : "en")}
+            className="gap-1"
+          >
             <Languages className="h-4 w-4" />
             <span className="text-xs font-semibold">{lang === "en" ? "తె" : "EN"}</span>
           </Button>
@@ -81,18 +88,47 @@ function AuthPage() {
             {mode === "signup" && (
               <div className="space-y-1.5">
                 <Label htmlFor="name">{t("name")}</Label>
-                <Input id="name" value={fullName} onChange={(e) => setFullName(e.target.value)} className="h-12" required />
+                <Input
+                  id="name"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="h-12"
+                  required
+                />
               </div>
             )}
             <div className="space-y-1.5">
               <Label htmlFor="email">{t("email")}</Label>
-              <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-12" required autoComplete="email" inputMode="email" />
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="h-12"
+                required
+                autoComplete="email"
+                inputMode="email"
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="password">{t("password")}</Label>
-              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} className="h-12" required minLength={6} autoComplete={mode === "login" ? "current-password" : "new-password"} />
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="h-12"
+                required
+                minLength={6}
+                autoComplete={mode === "login" ? "current-password" : "new-password"}
+              />
             </div>
-            <Button type="submit" size="lg" className="h-12 w-full text-base font-semibold" disabled={loading}>
+            <Button
+              type="submit"
+              size="lg"
+              className="h-12 w-full text-base font-semibold"
+              disabled={loading}
+            >
               {loading ? t("loading") : mode === "login" ? t("login") : t("signup")}
             </Button>
           </form>

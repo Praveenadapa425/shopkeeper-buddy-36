@@ -93,17 +93,20 @@ function openDb(): Promise<IDBDatabase> {
 
     req.onupgradeneeded = () => {
       const db = req.result;
-      if (!db.objectStoreNames.contains("products")) db.createObjectStore("products", { keyPath: "id" });
+      if (!db.objectStoreNames.contains("products"))
+        db.createObjectStore("products", { keyPath: "id" });
       if (!db.objectStoreNames.contains("product_variants")) {
         const store = db.createObjectStore("product_variants", { keyPath: "id" });
         store.createIndex("product_id", "product_id", { unique: false });
       }
-      if (!db.objectStoreNames.contains("categories")) db.createObjectStore("categories", { keyPath: "id" });
+      if (!db.objectStoreNames.contains("categories"))
+        db.createObjectStore("categories", { keyPath: "id" });
       if (!db.objectStoreNames.contains("inventory_stock")) {
         const store = db.createObjectStore("inventory_stock", { keyPath: "id" });
         store.createIndex("product_id", "product_id", { unique: false });
       }
-      if (!db.objectStoreNames.contains("images")) db.createObjectStore("images", { keyPath: "key" });
+      if (!db.objectStoreNames.contains("images"))
+        db.createObjectStore("images", { keyPath: "key" });
       if (!db.objectStoreNames.contains("meta")) db.createObjectStore("meta", { keyPath: "key" });
     };
 
@@ -123,8 +126,10 @@ async function tx<T>(
     const store = transaction.objectStore(storeName);
     const finished = new Promise<void>((resolve, reject) => {
       transaction.oncomplete = () => resolve();
-      transaction.onerror = () => reject(transaction.error ?? new Error("IndexedDB transaction failed"));
-      transaction.onabort = () => reject(transaction.error ?? new Error("IndexedDB transaction aborted"));
+      transaction.onerror = () =>
+        reject(transaction.error ?? new Error("IndexedDB transaction failed"));
+      transaction.onabort = () =>
+        reject(transaction.error ?? new Error("IndexedDB transaction aborted"));
     });
     const result = await run(store);
     await finished;
@@ -263,7 +268,7 @@ export async function cacheImage(
   key: string,
   blob: Blob,
   productId?: string,
-  type?: "thumb" | "full"
+  type?: "thumb" | "full",
 ) {
   if (!canUseIndexedDB()) return;
 
@@ -324,9 +329,7 @@ const preloadQueue: { id: string; path: string }[] = [];
 export async function queueThumbnailPreload(products: { id: string; image_url: string | null }[]) {
   if (!canUseIndexedDB()) return;
 
-  const items = products
-    .filter((p) => p.image_url)
-    .map((p) => ({ id: p.id, path: p.image_url! }));
+  const items = products.filter((p) => p.image_url).map((p) => ({ id: p.id, path: p.image_url! }));
 
   if (items.length === 0) {
     await updateCacheStatus("Complete");
@@ -386,7 +389,10 @@ async function processPreloadQueue() {
         if (!img.ok) throw new Error("Thumbnail fetch failed");
         blob = await img.blob();
       } catch (thumbErr) {
-        console.warn(`[Offline Cache] Thumbnail file ${key} not found in storage, falling back to full image ${item.path}:`, thumbErr);
+        console.warn(
+          `[Offline Cache] Thumbnail file ${key} not found in storage, falling back to full image ${item.path}:`,
+          thumbErr,
+        );
         // Fallback to downloading the full image
         const res = await signedImageUrl({ data: { path: item.path } });
         const img = await fetch(res.url);
@@ -410,7 +416,9 @@ async function processPreloadQueue() {
 
   if (failedCount > 0 && successCount === 0) {
     await updateCacheStatus("Failed");
-    console.error(`[Offline Cache] Full catalog sync completion: FAILED (${successCount} cached, ${failedCount} failed)`);
+    console.error(
+      `[Offline Cache] Full catalog sync completion: FAILED (${successCount} cached, ${failedCount} failed)`,
+    );
   } else {
     await updateCacheStatus("Complete");
     const completionTime = new Date().toISOString();
@@ -422,7 +430,9 @@ async function processPreloadQueue() {
     } catch (e) {
       console.warn("[Offline Cache] Failed to update Dexie fullSyncCompletionTime:", e);
     }
-    console.log(`[Offline Cache] Full catalog sync completion: SUCCESS. Completion time: ${completionTime}`);
+    console.log(
+      `[Offline Cache] Full catalog sync completion: SUCCESS. Completion time: ${completionTime}`,
+    );
   }
   notifyStatsUpdate();
 }
@@ -475,7 +485,9 @@ export async function getDexieCacheStats(): Promise<CacheStats> {
 
 export async function getCacheStats(): Promise<CacheStats> {
   const stats = await getDexieCacheStats();
-  console.log(`[Offline Cache] Dexie cache statistics updates: Products=${stats.productsCached}/${stats.totalProducts}, Images=${stats.imagesCached}/${stats.totalImages}, Status=${stats.status}`);
+  console.log(
+    `[Offline Cache] Dexie cache statistics updates: Products=${stats.productsCached}/${stats.totalProducts}, Images=${stats.imagesCached}/${stats.totalImages}, Status=${stats.status}`,
+  );
   return stats;
 }
 

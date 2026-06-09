@@ -72,7 +72,8 @@ function AuthenticatedLayout() {
           <div className="space-y-2">
             <h1 className="text-2xl font-bold tracking-tight">You're Offline</h1>
             <p className="text-muted-foreground text-sm">
-              No cached data is available on this device. Please connect to the internet once to sync the catalog.
+              No cached data is available on this device. Please connect to the internet once to
+              sync the catalog.
             </p>
           </div>
           <Button onClick={() => window.location.reload()} size="lg" className="h-12 w-full gap-2">
@@ -111,7 +112,9 @@ export const Route = createFileRoute("/_authenticated")({
         // ignore
       }
       // Return offline user to allow cached view immediately
-      console.log("[Offline Guard] Cached data exists. Allowing cached view without blocking on auth.");
+      console.log(
+        "[Offline Guard] Cached data exists. Allowing cached view without blocking on auth.",
+      );
       return { user: { id: "offline_user", email: "offline@shop.buddy" } };
     }
 

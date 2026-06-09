@@ -61,7 +61,7 @@ export function ProductImage({
       const img = await fetch(res.url);
       if (!img.ok) throw new Error("Image fetch failed");
       const blob = await img.blob();
-      
+
       const type = key.startsWith("thumb_") ? "thumb" : "full";
       await cacheImage(key, blob, undefined, type);
       if (active) setBlobUrl(blob);
@@ -71,10 +71,14 @@ export function ProductImage({
       if (!isOnline()) {
         const found = await loadCached(primary);
         if (!found) {
-          console.log(`[Offline Cache] Offline image missing for primary key: ${primary}. Trying fallback...`);
+          console.log(
+            `[Offline Cache] Offline image missing for primary key: ${primary}. Trying fallback...`,
+          );
           const foundSec = await loadCached(secondary);
           if (foundSec) {
-            console.log(`[Offline Cache] Thumbnail fallback usage: successfully fell back to key ${secondary}`);
+            console.log(
+              `[Offline Cache] Thumbnail fallback usage: successfully fell back to key ${secondary}`,
+            );
           }
         }
         return;
@@ -85,11 +89,15 @@ export function ProductImage({
       } catch {
         const found = await loadCached(primary);
         if (found) return;
-        
-        console.log(`[Offline Cache] Remote load failed for primary key: ${primary}. Trying fallback...`);
+
+        console.log(
+          `[Offline Cache] Remote load failed for primary key: ${primary}. Trying fallback...`,
+        );
         const foundSec = await loadCached(secondary);
         if (foundSec) {
-          console.log(`[Offline Cache] Thumbnail fallback usage: successfully fell back to key ${secondary}`);
+          console.log(
+            `[Offline Cache] Thumbnail fallback usage: successfully fell back to key ${secondary}`,
+          );
           return;
         }
 
@@ -98,7 +106,7 @@ export function ProductImage({
           const img = await fetch(res.url);
           if (!img.ok) throw new Error("Fallback image fetch failed");
           const blob = await img.blob();
-          
+
           const primaryType = primary.startsWith("thumb_") ? "thumb" : "full";
           const secondaryType = secondary.startsWith("thumb_") ? "thumb" : "full";
           await cacheImage(secondary, blob, undefined, secondaryType);
@@ -128,9 +136,7 @@ export function ProductImage({
 
   return (
     <div className={`relative overflow-hidden bg-muted ${className ?? ""}`}>
-      {!loaded && (
-        <div className="absolute inset-0 animate-pulse bg-muted" aria-hidden="true" />
-      )}
+      {!loaded && <div className="absolute inset-0 animate-pulse bg-muted" aria-hidden="true" />}
       {url && (
         <img
           src={url}

@@ -29,9 +29,7 @@ export async function revealCostPrices({ data }: { data: { pin: string } }) {
   if (incoming !== settings.admin_pin_hash) {
     return { ok: false as const, error: "wrong_pin" };
   }
-  const { data: rows, error: pErr } = await supabase
-    .from("products")
-    .select("id, cost_price");
+  const { data: rows, error: pErr } = await supabase.from("products").select("id, cost_price");
   if (pErr) throw new Error(pErr.message);
   const map: Record<string, number> = {};
   for (const r of rows ?? []) map[r.id] = Number(r.cost_price);
@@ -47,25 +45,44 @@ export async function verifyAdminPin({ data }: { data: { pin: string } }) {
     .select("admin_pin_hash")
     .eq("id", 1)
     .maybeSingle();
+
   if (error) throw new Error(error.message);
+
   if (!settings?.admin_pin_hash) {
-    return { ok: false as const, error: "PIN not set. Set an Admin PIN in Settings." };
+    return {
+      ok: false as const,
+      error: "PIN not set. Set an Admin PIN in Settings.",
+    };
   }
-  
+
   const incoming = await sha256Hex(data.pin);
+
   if (incoming !== settings.admin_pin_hash) {
-    return { ok: false as const, error: "wrong_pin" };
+    return {
+      ok: false as const,
+      error: "wrong_pin",
+    };
   }
-  return { ok: true as const };
+
+  return {
+    ok: true as const,
+  };
 }
 
 export async function setAdminPin({ data }: { data: { currentPin?: string; newPin: string } }) {
   z.object({
-    currentPin: z.string().regex(/^\d{4}$/).optional().or(z.literal("")),
+    currentPin: z
+      .string()
+      .regex(/^\d{4}$/)
+      .optional()
+      .or(z.literal("")),
     newPin: z.string().regex(/^\d{4}$/),
   }).parse(data);
 
-  const { data: { user }, error: uErr } = await supabase.auth.getUser();
+  const {
+    data: { user },
+    error: uErr,
+  } = await supabase.auth.getUser();
   if (uErr || !user) return { ok: false as const, error: "Not authenticated." };
 
   // Only admins can set the PIN
@@ -93,29 +110,29 @@ export async function setAdminPin({ data }: { data: { currentPin?: string; newPi
 
   const newHash = await sha256Hex(data.newPin);
 
-const result = await supabase
-  .from("app_settings")
-  .update({
-    admin_pin_hash: newHash,
-    updated_at: new Date().toISOString(),
-  })
-  .eq("id", 1)
-  .select();
+  const result = await supabase
+    .from("app_settings")
+    .update({
+      admin_pin_hash: newHash,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", 1)
+    .select();
 
-// console.log("UPDATE RESULT:", result);
+  // console.log("UPDATE RESULT:", result);
 
-if (!result.data || result.data.length === 0) {
-  return {
-    ok: false as const,
-    error: "No rows updated",
-  };
-}
+  if (!result.data || result.data.length === 0) {
+    return {
+      ok: false as const,
+      error: "No rows updated",
+    };
+  }
 
-if (result.error) {
-  throw new Error(result.error.message);
-}
+  if (result.error) {
+    throw new Error(result.error.message);
+  }
 
-return { ok: true as const };
+  return { ok: true as const };
 
   // const newHash = await sha256Hex(data.newPin);
   // const { error: upErr } = await supabase
@@ -138,13 +155,13 @@ export async function signedImageUrl({ data }: { data: { path: string } }) {
 }
 
 export async function getMyRole() {
-  const { data: { user }, error: uErr } = await supabase.auth.getUser();
+  const {
+    data: { user },
+    error: uErr,
+  } = await supabase.auth.getUser();
   if (uErr || !user) return { roles: [] };
 
-  const { data, error } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", user.id);
+  const { data, error } = await supabase.from("user_roles").select("role").eq("user_id", user.id);
   if (error) throw new Error(error.message);
   return { roles: (data ?? []).map((r) => r.role as "admin" | "owner") };
 }

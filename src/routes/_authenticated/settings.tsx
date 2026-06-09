@@ -26,7 +26,9 @@ function SettingsPage() {
   const myRole = useServerFn(getMyRole);
 
   useEffect(() => {
-    myRole().then((r) => setRoles(r.roles)).catch(() => {});
+    myRole()
+      .then((r) => setRoles(r.roles))
+      .catch(() => {});
   }, [myRole]);
 
   useEffect(() => {
@@ -72,7 +74,9 @@ function SettingsPage() {
           </div>
           <div>
             <p className="text-sm font-medium text-muted-foreground">Role</p>
-            <p className="font-semibold">{isAdmin ? t("admin") : roles.includes("owner") ? t("owner") : "—"}</p>
+            <p className="font-semibold">
+              {isAdmin ? t("admin") : roles.includes("owner") ? t("owner") : "—"}
+            </p>
           </div>
         </div>
       </Card>
@@ -89,30 +93,42 @@ function SettingsPage() {
           <div className="space-y-3 text-sm">
             <div className="flex justify-between border-b border-border/50 pb-2">
               <span className="text-muted-foreground">Online / Offline Status</span>
-              <span className={`font-semibold ${cacheStats.online ? "text-emerald-600" : "text-destructive"}`}>
+              <span
+                className={`font-semibold ${cacheStats.online ? "text-emerald-600" : "text-destructive"}`}
+              >
                 {cacheStats.online ? "Online" : "Offline"}
               </span>
             </div>
 
             <div className="flex justify-between border-b border-border/50 pb-2">
               <span className="text-muted-foreground">Cache Status</span>
-              <span className={`font-semibold ${
-                cacheStats.status === "Complete" ? "text-emerald-600" :
-                cacheStats.status === "In Progress" ? "text-amber-500 animate-pulse" :
-                cacheStats.status === "Failed" ? "text-destructive" : "text-muted-foreground"
-              }`}>
+              <span
+                className={`font-semibold ${
+                  cacheStats.status === "Complete"
+                    ? "text-emerald-600"
+                    : cacheStats.status === "In Progress"
+                      ? "text-amber-500 animate-pulse"
+                      : cacheStats.status === "Failed"
+                        ? "text-destructive"
+                        : "text-muted-foreground"
+                }`}
+              >
                 {cacheStats.status}
               </span>
             </div>
 
             <div className="flex justify-between border-b border-border/50 pb-2">
               <span className="text-muted-foreground">Products Cached</span>
-              <span className="font-semibold">{cacheStats.productsCached} / {cacheStats.totalProducts}</span>
+              <span className="font-semibold">
+                {cacheStats.productsCached} / {cacheStats.totalProducts}
+              </span>
             </div>
 
             <div className="flex justify-between border-b border-border/50 pb-2">
               <span className="text-muted-foreground">Images Cached</span>
-              <span className="font-semibold">{cacheStats.imagesCached} / {cacheStats.totalImages}</span>
+              <span className="font-semibold">
+                {cacheStats.imagesCached} / {cacheStats.totalImages}
+              </span>
             </div>
 
             <div className="flex justify-between border-b border-border/50 pb-2">
@@ -128,14 +144,28 @@ function SettingsPage() {
             <div className="flex justify-between border-b border-border/50 pb-2">
               <span className="text-muted-foreground">Last Successful Sync Time</span>
               <span className="font-medium text-right">
-                {cacheStats.lastSyncTime ? new Date(cacheStats.lastSyncTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + " " + new Date(cacheStats.lastSyncTime).toLocaleDateString() : "Never"}
+                {cacheStats.lastSyncTime
+                  ? new Date(cacheStats.lastSyncTime).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    }) +
+                    " " +
+                    new Date(cacheStats.lastSyncTime).toLocaleDateString()
+                  : "Never"}
               </span>
             </div>
 
             <div className="flex justify-between">
               <span className="text-muted-foreground">Last Full Catalog Cache Completion Time</span>
               <span className="font-medium text-right">
-                {cacheStats.completionTime ? new Date(cacheStats.completionTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + " " + new Date(cacheStats.completionTime).toLocaleDateString() : "Never"}
+                {cacheStats.completionTime
+                  ? new Date(cacheStats.completionTime).toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    }) +
+                    " " +
+                    new Date(cacheStats.completionTime).toLocaleDateString()
+                  : "Never"}
               </span>
             </div>
           </div>
@@ -197,13 +227,20 @@ function SettingsPage() {
             </InputOTP>
           </div>
 
-          <Button size="lg" className="h-12 w-full" onClick={handleSave} disabled={saving || next.length !== 4}>
+          <Button
+            size="lg"
+            className="h-12 w-full"
+            onClick={handleSave}
+            disabled={saving || next.length !== 4}
+          >
             {saving ? t("loading") : t("save")}
           </Button>
         </Card>
       )}
 
-      <p className="rounded-lg bg-muted px-4 py-3 text-sm text-muted-foreground">{t("install_hint")}</p>
+      <p className="rounded-lg bg-muted px-4 py-3 text-sm text-muted-foreground">
+        {t("install_hint")}
+      </p>
     </div>
   );
 }

@@ -1,12 +1,17 @@
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
-import { LayoutDashboard, Package, Settings as SettingsIcon, LogOut, Languages } from "lucide-react";
+import {
+  LayoutDashboard,
+  Package,
+  Settings as SettingsIcon,
+  LogOut,
+  Languages,
+} from "lucide-react";
 import { useEffect, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import { OnlineStatus } from "@/components/OnlineStatus";
 import { registerAppServiceWorker } from "@/lib/registerSW";
-
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { t, lang, setLang } = useI18n();
@@ -25,8 +30,18 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const tabs = [
     { to: "/", icon: LayoutDashboard, label: t("dashboard"), match: (p: string) => p === "/" },
-    { to: "/products", icon: Package, label: t("products"), match: (p: string) => p.startsWith("/products") },
-    { to: "/settings", icon: SettingsIcon, label: t("settings"), match: (p: string) => p.startsWith("/settings") },
+    {
+      to: "/products",
+      icon: Package,
+      label: t("products"),
+      match: (p: string) => p.startsWith("/products"),
+    },
+    {
+      to: "/settings",
+      icon: SettingsIcon,
+      label: t("settings"),
+      match: (p: string) => p.startsWith("/settings"),
+    },
   ] as const;
 
   return (

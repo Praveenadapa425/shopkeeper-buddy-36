@@ -1,14 +1,26 @@
-import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useServerFn } from "@/lib/useServerFn";
 import { Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { verifyAdminPin } from "@/lib/api/inventory.functions";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
-
-const STORAGE_KEY = "edit_unlocked";
 
 type Ctx = {
   isUnlocked: () => boolean;
@@ -26,24 +38,15 @@ export function EditUnlockProvider({ children }: { children: ReactNode }) {
   const successRef = useRef<(() => void) | null>(null);
   const verify = useServerFn(verifyAdminPin);
 
-  const isUnlocked = useCallback(
-    () => typeof window !== "undefined" && sessionStorage.getItem(STORAGE_KEY) === "1",
-    [],
-  );
+  const isUnlocked = useCallback(() => false, []);
 
   const requireEdit = useCallback((onSuccess: () => void) => {
-    if (typeof window !== "undefined" && sessionStorage.getItem(STORAGE_KEY) === "1") {
-      onSuccess();
-      return;
-    }
     successRef.current = onSuccess;
     setPin("");
     setOpen(true);
   }, []);
 
-  const lock = useCallback(() => {
-    if (typeof window !== "undefined") sessionStorage.removeItem(STORAGE_KEY);
-  }, []);
+  const lock = useCallback(() => {}, []);
 
   const handleSubmit = async () => {
     if (pin.length !== 4 || submitting) return;
@@ -54,7 +57,6 @@ export function EditUnlockProvider({ children }: { children: ReactNode }) {
         toast.error(res.error === "wrong_pin" ? t("wrong_pin") : res.error);
         setPin("");
       } else {
-        sessionStorage.setItem(STORAGE_KEY, "1");
         setOpen(false);
         setPin("");
         const cb = successRef.current;
@@ -68,7 +70,10 @@ export function EditUnlockProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const value = useMemo<Ctx>(() => ({ isUnlocked, requireEdit, lock }), [isUnlocked, requireEdit, lock]);
+  const value = useMemo<Ctx>(
+    () => ({ isUnlocked, requireEdit, lock }),
+    [isUnlocked, requireEdit, lock],
+  );
 
   return (
     <EditUnlockContext.Provider value={value}>

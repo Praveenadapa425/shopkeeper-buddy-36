@@ -1,5 +1,12 @@
 import { supabase } from "@/integrations/supabase/client";
-import { db, setMeta, getMeta, type CachedCategory, type CachedProduct, type CachedVariant } from "./db";
+import {
+  db,
+  setMeta,
+  getMeta,
+  type CachedCategory,
+  type CachedProduct,
+  type CachedVariant,
+} from "./db";
 import {
   cacheCategories,
   cacheProducts,
@@ -7,7 +14,7 @@ import {
   cacheVariants,
   queueThumbnailPreload,
   cacheSingleProduct,
-  type CacheStats
+  type CacheStats,
 } from "@/lib/offlineCache";
 
 /** Run `fetcher`; on success cache result via `persist`. On failure return cache via `read`. */
@@ -45,7 +52,9 @@ export async function fetchCategories(): Promise<CachedCategory[]> {
 }
 
 // ---------- Products list (with variants joined) ----------
-export type ProductRow = CachedProduct & { product_variants: { selling_price: number; sort_order: number }[] };
+export type ProductRow = CachedProduct & {
+  product_variants: { selling_price: number; sort_order: number }[];
+};
 
 export async function fetchProducts(): Promise<ProductRow[]> {
   return withCache(
@@ -182,14 +191,19 @@ export async function syncCatalogData(): Promise<void> {
   try {
     const [catRes, prodRes, varRes, stockRes] = await Promise.all([
       supabase.from("categories").select("id, name").order("name"),
-      supabase.from("products")
-        .select("id, name, image_url, stock_qty, selling_price, cost_price, low_stock_threshold, category_id, created_at, updated_at")
+      supabase
+        .from("products")
+        .select(
+          "id, name, image_url, stock_qty, selling_price, cost_price, low_stock_threshold, category_id, created_at, updated_at",
+        )
         .order("created_at", { ascending: false }),
-      supabase.from("product_variants")
+      supabase
+        .from("product_variants")
         .select("id, product_id, value, cost_price, selling_price, stock_quantity, sort_order")
         .order("sort_order"),
-      supabase.from("inventory_stock")
-        .select("id, product_id, variant_id, quantity, location, updated_at")
+      supabase
+        .from("inventory_stock")
+        .select("id, product_id, variant_id, quantity, location, updated_at"),
     ]);
 
     if (catRes.error) throw catRes.error;
@@ -202,7 +216,9 @@ export async function syncCatalogData(): Promise<void> {
     const variants = varRes.data ?? [];
     const stock = stockRes.data ?? [];
 
-    console.log(`[Offline Cache] Supabase fetch completed. Fetched: ${categories.length} categories, ${products.length} products, ${variants.length} variants, ${stock.length} stock rows.`);
+    console.log(
+      `[Offline Cache] Supabase fetch completed. Fetched: ${categories.length} categories, ${products.length} products, ${variants.length} variants, ${stock.length} stock rows.`,
+    );
 
     // Update Dexie database (shop-inventory-offline)
     await db().transaction("rw", db().categories, async () => {
@@ -210,7 +226,9 @@ export async function syncCatalogData(): Promise<void> {
       if (categories.length) await db().categories.bulkPut(categories);
     });
     await setMeta("lastSync:categories", Date.now());
-    console.log(`[Offline Cache] Categories successfully written to Dexie. Total: ${categories.length}`);
+    console.log(
+      `[Offline Cache] Categories successfully written to Dexie. Total: ${categories.length}`,
+    );
 
     await db().transaction("rw", db().products, async () => {
       const dirty = await db().products.where("_dirty").equals(1).toArray();
@@ -220,22 +238,30 @@ export async function syncCatalogData(): Promise<void> {
       await db().products.bulkPut([...keep, ...dirty]);
     });
     await setMeta("lastSync:products", Date.now());
-    console.log(`[Offline Cache] Products successfully written to Dexie. Total: ${products.length}`);
+    console.log(
+      `[Offline Cache] Products successfully written to Dexie. Total: ${products.length}`,
+    );
 
     await db().transaction("rw", db().variants, async () => {
-      const dirty = await db().variants.filter((v) => !!(v._dirty || v._deleted)).toArray();
+      const dirty = await db()
+        .variants.filter((v) => !!(v._dirty || v._deleted))
+        .toArray();
       const dirtyIds = new Set(dirty.map((d) => d.id));
       const keep = variants.filter((v) => !dirtyIds.has(v.id));
       await db().variants.clear();
       await db().variants.bulkPut([...keep, ...dirty]);
     });
-    console.log(`[Offline Cache] Variants successfully written to Dexie. Total: ${variants.length}`);
+    console.log(
+      `[Offline Cache] Variants successfully written to Dexie. Total: ${variants.length}`,
+    );
 
     // Keep Dexie meta stats updated
     const now = Date.now();
     await setMeta("totalProductsCount", String(products.length));
     await setMeta("lastSyncAt", now);
-    console.log(`[Offline Cache] Metadata successfully updated: totalProductsCount = ${products.length}, lastSyncAt = ${new Date(now).toISOString()}`);
+    console.log(
+      `[Offline Cache] Metadata successfully updated: totalProductsCount = ${products.length}, lastSyncAt = ${new Date(now).toISOString()}`,
+    );
 
     // Update raw IndexedDB database (shop-buddy-offline)
     const cachedProducts = products.map((p) => ({
@@ -276,10 +302,14 @@ export async function syncCatalogData(): Promise<void> {
     await cacheVariants(cachedVariants);
     await cacheStock(cachedStock);
     await cacheProducts(cachedProducts); // Updates raw IndexedDB metadata, triggers stats update event
-    console.log(`[Offline Cache] Raw IndexedDB stores (categories, variants, stock, products) updated successfully.`);
+    console.log(
+      `[Offline Cache] Raw IndexedDB stores (categories, variants, stock, products) updated successfully.`,
+    );
 
     // Queue thumbnail preload
-    console.log(`[Offline Cache] Queuing preload of ${cachedProducts.filter(p => p.image_url).length} thumbnails...`);
+    console.log(
+      `[Offline Cache] Queuing preload of ${cachedProducts.filter((p) => p.image_url).length} thumbnails...`,
+    );
     void queueThumbnailPreload(cachedProducts);
   } catch (error) {
     console.error("[Offline Cache] Error during background synchronization:", error);
@@ -295,14 +325,18 @@ export async function syncProductData(productId: string): Promise<void> {
 
   try {
     const [prodRes, varRes] = await Promise.all([
-      supabase.from("products")
-        .select("id, name, image_url, stock_qty, selling_price, cost_price, low_stock_threshold, category_id, created_at, updated_at")
+      supabase
+        .from("products")
+        .select(
+          "id, name, image_url, stock_qty, selling_price, cost_price, low_stock_threshold, category_id, created_at, updated_at",
+        )
         .eq("id", productId)
         .maybeSingle(),
-      supabase.from("product_variants")
+      supabase
+        .from("product_variants")
         .select("id, product_id, value, cost_price, selling_price, stock_quantity, sort_order")
         .eq("product_id", productId)
-        .order("sort_order")
+        .order("sort_order"),
     ]);
 
     if (prodRes.error) throw prodRes.error;
@@ -334,7 +368,9 @@ export async function syncProductData(productId: string): Promise<void> {
       await db().variants.where("product_id").equals(productId).delete();
       await db().variants.bulkPut([...variants.filter((v) => !dirtyIds.has(v.id)), ...dirtyVars]);
     });
-    console.log(`[Offline Cache] Single product data successfully synced to Dexie for: ${productId}`);
+    console.log(
+      `[Offline Cache] Single product data successfully synced to Dexie for: ${productId}`,
+    );
 
     // Update raw IndexedDB using custom helper
     const cachedProduct = {
@@ -360,7 +396,9 @@ export async function syncProductData(productId: string): Promise<void> {
     }));
 
     await cacheSingleProduct(cachedProduct, cachedVariants);
-    console.log(`[Offline Cache] Single product data successfully synced to raw IndexedDB for: ${productId}`);
+    console.log(
+      `[Offline Cache] Single product data successfully synced to raw IndexedDB for: ${productId}`,
+    );
   } catch (error) {
     console.error(`[Offline Cache] Error syncing product data for ${productId}:`, error);
     throw error;

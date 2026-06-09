@@ -41,7 +41,11 @@ function drawToCanvas(img: HTMLImageElement, maxEdge: number) {
   return { canvas, w, h };
 }
 
-function canvasToBlob(canvas: HTMLCanvasElement, mime: string, quality: number): Promise<Blob | null> {
+function canvasToBlob(
+  canvas: HTMLCanvasElement,
+  mime: string,
+  quality: number,
+): Promise<Blob | null> {
   return new Promise((resolve) => canvas.toBlob((b) => resolve(b), mime, quality));
 }
 
@@ -66,9 +70,17 @@ async function encode(
     }
   }
   // Last resort: return the smallest webp at low q
-  const b = (await canvasToBlob(canvas, "image/webp", 0.4)) ?? (await canvasToBlob(canvas, "image/jpeg", 0.4));
+  const b =
+    (await canvasToBlob(canvas, "image/webp", 0.4)) ??
+    (await canvasToBlob(canvas, "image/jpeg", 0.4));
   if (!b) throw new Error("Image encoding failed");
-  return { blob: b, mime: b.type, ext: b.type === "image/webp" ? "webp" : "jpg", width: w, height: h };
+  return {
+    blob: b,
+    mime: b.type,
+    ext: b.type === "image/webp" ? "webp" : "jpg",
+    width: w,
+    height: h,
+  };
 }
 
 /** Optimize a full-size image: max 1600px longest edge, <= 1 MB. */

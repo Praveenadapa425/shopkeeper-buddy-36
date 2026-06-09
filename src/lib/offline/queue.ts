@@ -1,5 +1,12 @@
 import { supabase } from "@/integrations/supabase/client";
-import { db, setMeta, type CachedProduct, type CachedVariant, type MutationOp, type QueuedMutation } from "./db";
+import {
+  db,
+  setMeta,
+  type CachedProduct,
+  type CachedVariant,
+  type MutationOp,
+  type QueuedMutation,
+} from "./db";
 
 const listeners = new Set<() => void>();
 export function subscribeQueue(fn: () => void) {
@@ -127,7 +134,8 @@ async function executeOp(op: MutationOp): Promise<void> {
       categoryId = data.id;
     }
     const { _dirty: _d, _deleted: _x, ...rest } = op.patch;
-    void _d; void _x;
+    void _d;
+    void _x;
     const patch: Record<string, unknown> = { ...rest };
     if (categoryId !== undefined) patch.category_id = categoryId;
     const { error } = await supabase

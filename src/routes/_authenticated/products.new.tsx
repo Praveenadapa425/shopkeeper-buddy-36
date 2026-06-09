@@ -14,11 +14,15 @@ import { optimizeFullImage, generateThumbnail } from "@/lib/imageOptimize";
 import { fetchCategories, fetchProduct, fetchVariants } from "@/lib/offline/cache";
 import { applyOptimistic, enqueue } from "@/lib/offline/queue";
 
-
-
 type Mode = { kind: "create" } | { kind: "edit"; id: string };
 
-type VariantRow = { id?: string; value: string; cost_price: string; selling_price: string; stock_quantity: string };
+type VariantRow = {
+  id?: string;
+  value: string;
+  cost_price: string;
+  selling_price: string;
+  stock_quantity: string;
+};
 
 export function ProductForm({ mode }: { mode: Mode }) {
   const { t } = useI18n();
@@ -94,7 +98,10 @@ export function ProductForm({ mode }: { mode: Mode }) {
     setVariants((rows) => rows.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
   };
   const addVariant = () =>
-    setVariants((r) => [...r, { value: "", cost_price: "", selling_price: "", stock_quantity: "0" }]);
+    setVariants((r) => [
+      ...r,
+      { value: "", cost_price: "", selling_price: "", stock_quantity: "0" },
+    ]);
   const removeVariant = (idx: number) =>
     setVariants((r) => (r.length <= 1 ? r : r.filter((_, i) => i !== idx)));
 
@@ -277,7 +284,13 @@ export function ProductForm({ mode }: { mode: Mode }) {
   return (
     <form onSubmit={onSave} className="space-y-5">
       <div className="flex items-center justify-between">
-        <Button type="button" variant="ghost" size="sm" onClick={() => nav({ to: "/products" })} className="gap-1 -ml-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => nav({ to: "/products" })}
+          className="gap-1 -ml-2"
+        >
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <h1 className="text-lg font-bold">
@@ -310,10 +323,24 @@ export function ProductForm({ mode }: { mode: Mode }) {
               className="hidden"
               onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
             />
-            <Button type="button" variant="secondary" size="lg" className="gap-2" onClick={() => cameraRef.current?.click()} disabled={uploading}>
+            <Button
+              type="button"
+              variant="secondary"
+              size="lg"
+              className="gap-2"
+              onClick={() => cameraRef.current?.click()}
+              disabled={uploading}
+            >
               <Camera className="h-5 w-5" /> {t("take_photo")}
             </Button>
-            <Button type="button" variant="outline" size="lg" className="gap-2" onClick={() => fileRef.current?.click()} disabled={uploading}>
+            <Button
+              type="button"
+              variant="outline"
+              size="lg"
+              className="gap-2"
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading}
+            >
               <ImagePlus className="h-5 w-5" /> {t("choose_photo")}
             </Button>
           </div>
@@ -323,7 +350,13 @@ export function ProductForm({ mode }: { mode: Mode }) {
       <Card className="space-y-4 p-4">
         <div className="space-y-1.5">
           <Label htmlFor="name">{t("name")}</Label>
-          <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required className="h-12" />
+          <Input
+            id="name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            className="h-12"
+          />
         </div>
 
         <div className="space-y-1.5">
@@ -351,14 +384,28 @@ export function ProductForm({ mode }: { mode: Mode }) {
 
         <div className="space-y-1.5">
           <Label htmlFor="low">{t("low_stock_threshold")}</Label>
-          <Input id="low" type="number" inputMode="numeric" min="0" value={lowStock} onChange={(e) => setLowStock(e.target.value)} className="h-12" />
+          <Input
+            id="low"
+            type="number"
+            inputMode="numeric"
+            min="0"
+            value={lowStock}
+            onChange={(e) => setLowStock(e.target.value)}
+            className="h-12"
+          />
         </div>
       </Card>
 
       <Card className="space-y-3 p-4">
         <div className="flex items-center justify-between">
           <Label>{t("variants")}</Label>
-          <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={addVariant}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={addVariant}
+          >
             <Plus className="h-4 w-4" /> {t("add_variant")}
           </Button>
         </div>
@@ -447,11 +494,22 @@ export function ProductForm({ mode }: { mode: Mode }) {
       </Card>
 
       <div className="space-y-2">
-        <Button type="submit" size="lg" className="h-14 w-full gap-2 text-base font-semibold" disabled={saving || uploading}>
+        <Button
+          type="submit"
+          size="lg"
+          className="h-14 w-full gap-2 text-base font-semibold"
+          disabled={saving || uploading}
+        >
           <Save className="h-5 w-5" /> {saving ? t("loading") : t("save")}
         </Button>
         {mode.kind === "edit" && (
-          <Button type="button" variant="destructive" size="lg" className="h-12 w-full gap-2" onClick={onDelete}>
+          <Button
+            type="button"
+            variant="destructive"
+            size="lg"
+            className="h-12 w-full gap-2"
+            onClick={onDelete}
+          >
             <Trash2 className="h-5 w-5" /> {t("delete")}
           </Button>
         )}
