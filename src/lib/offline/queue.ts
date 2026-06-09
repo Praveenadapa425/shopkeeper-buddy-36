@@ -126,11 +126,14 @@ async function executeOp(op: MutationOp): Promise<void> {
       if (error) throw error;
       categoryId = data.id;
     }
-    const patch: Partial<CachedProduct> = { ...op.patch };
+    const { _dirty: _d, _deleted: _x, ...rest } = op.patch;
+    void _d; void _x;
+    const patch: Record<string, unknown> = { ...rest };
     if (categoryId !== undefined) patch.category_id = categoryId;
-    delete (patch as { _dirty?: number })._dirty;
-    delete (patch as { _deleted?: number })._deleted;
-    const { error } = await supabase.from("products").update(patch).eq("id", op.id);
+    const { error } = await supabase
+      .from("products")
+      .update(patch as Partial<CachedProduct>)
+      .eq("id", op.id);
     if (error) throw error;
 
     if (op.variants) {
