@@ -79,6 +79,13 @@ const en: Dict = {
   online: "Online",
   offline: "Offline — viewing cached data",
   back_online: "Back online",
+  status_online: "Online",
+  status_offline: "Offline",
+  status_syncing: "Syncing",
+  status_synced: "Synced",
+  pending_changes: "Pending changes",
+  last_sync: "Last sync",
+  queued_offline: "Saved offline — will sync when online",
 };
 
 const te: Dict = {
@@ -156,6 +163,13 @@ const te: Dict = {
   online: "ఆన్‌లైన్",
   offline: "ఆఫ్‌లైన్ — క్యాష్ చేసిన డేటా",
   back_online: "మళ్ళీ ఆన్‌లైన్",
+  status_online: "ఆన్‌లైన్",
+  status_offline: "ఆఫ్‌లైన్",
+  status_syncing: "సింక్ అవుతోంది",
+  status_synced: "సింక్ అయింది",
+  pending_changes: "పెండింగ్ మార్పులు",
+  last_sync: "చివరి సింక్",
+  queued_offline: "ఆఫ్‌లైన్‌లో సేవ్ — ఆన్‌లైన్ అయినప్పుడు సింక్ అవుతుంది",
 };
 
 const dicts: Record<Lang, Dict> = { en, te };

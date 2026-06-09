@@ -1,51 +1,52 @@
 import { useEffect, useState } from "react";
-import { Wifi, WifiOff } from "lucide-react";
+import { Cloud, CloudOff, RefreshCw, Check } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
+import { useSyncStatus } from "@/lib/offline/useSyncStatus";
+import { processQueue } from "@/lib/offline/queue";
 
-/** Compact pill that shows when the device is offline (hides when online). */
+function formatAgo(ts: number | null): string {
+  if (!ts) return "—";
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h`;
+  return `${Math.floor(s / 86400)}d`;
+}
+
+/** Status pill: online / offline / syncing / synced, with last-sync timestamp. */
 export function OnlineStatus() {
   const { t } = useI18n();
-  const [online, setOnline] = useState(true);
-  const [show, setShow] = useState(false);
-  const [justBack, setJustBack] = useState(false);
+  const { status, pending, lastSync } = useSyncStatus();
+  const [tick, setTick] = useState(0);
 
+  // Rerender every minute so "ago" text stays fresh
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    setOnline(navigator.onLine);
-    setShow(!navigator.onLine);
-    const onOnline = () => {
-      setOnline(true);
-      setJustBack(true);
-      setShow(true);
-      setTimeout(() => setShow(false), 2500);
-    };
-    const onOffline = () => {
-      setOnline(false);
-      setJustBack(false);
-      setShow(true);
-    };
-    window.addEventListener("online", onOnline);
-    window.addEventListener("offline", onOffline);
-    return () => {
-      window.removeEventListener("online", onOnline);
-      window.removeEventListener("offline", onOffline);
-    };
+    const i = setInterval(() => setTick((x) => x + 1), 60_000);
+    return () => clearInterval(i);
   }, []);
+  void tick;
 
-  if (!show) return null;
+  const cfg =
+    status === "offline"
+      ? { Icon: CloudOff, label: t("status_offline"), cls: "bg-destructive text-destructive-foreground" }
+      : status === "syncing"
+        ? { Icon: RefreshCw, label: `${t("status_syncing")}${pending > 0 ? ` (${pending})` : ""}`, cls: "bg-amber-500 text-white", spin: true }
+        : status === "synced"
+          ? { Icon: Check, label: `${t("status_synced")} · ${formatAgo(lastSync)}`, cls: "bg-emerald-600 text-white" }
+          : { Icon: Cloud, label: t("status_online"), cls: "bg-emerald-600 text-white" };
+
+  const Icon = cfg.Icon;
   return (
-    <div
-      role="status"
-      className={`fixed left-1/2 top-2 z-50 -translate-x-1/2 rounded-full px-3 py-1.5 text-xs font-semibold shadow-md ${
-        online
-          ? "bg-emerald-600 text-white"
-          : "bg-destructive text-destructive-foreground"
-      }`}
+    <button
+      type="button"
+      onClick={() => void processQueue()}
+      aria-label={cfg.label}
+      className={`fixed left-1/2 top-2 z-50 -translate-x-1/2 rounded-full px-3 py-1 text-xs font-semibold shadow-md ${cfg.cls}`}
     >
       <span className="inline-flex items-center gap-1.5">
-        {online ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
-        {online ? (justBack ? t("back_online") : t("online")) : t("offline")}
+        <Icon className={`h-3.5 w-3.5 ${cfg.spin ? "animate-spin" : ""}`} />
+        {cfg.label}
       </span>
-    </div>
+    </button>
   );
 }
