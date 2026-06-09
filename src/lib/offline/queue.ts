@@ -132,7 +132,7 @@ async function executeOp(op: MutationOp): Promise<void> {
     if (categoryId !== undefined) patch.category_id = categoryId;
     const { error } = await supabase
       .from("products")
-      .update(patch as Partial<CachedProduct>)
+      .update(patch as never)
       .eq("id", op.id);
     if (error) throw error;
 
