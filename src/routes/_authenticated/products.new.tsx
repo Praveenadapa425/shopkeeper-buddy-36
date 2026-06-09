@@ -11,8 +11,10 @@ import { ProductImage } from "@/components/ProductImage";
 import { Camera, ImagePlus, Trash2, ArrowLeft, Save, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { optimizeFullImage, generateThumbnail } from "@/lib/imageOptimize";
+import { fetchCategories, fetchProduct, fetchVariants } from "@/lib/offline/cache";
+import { applyOptimistic, enqueue } from "@/lib/offline/queue";
 
-type Category = { id: string; name: string };
+
 
 type Mode = { kind: "create" } | { kind: "edit"; id: string };
 
@@ -40,41 +42,19 @@ export function ProductForm({ mode }: { mode: Mode }) {
 
   const { data: cats = [] } = useQuery({
     queryKey: ["categories"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("categories").select("id, name").order("name");
-      if (error) throw error;
-      return (data ?? []) as Category[];
-    },
+    queryFn: fetchCategories,
   });
 
   const { data: existing } = useQuery({
     queryKey: ["product", mode.kind === "edit" ? mode.id : null],
     enabled: mode.kind === "edit",
-    queryFn: async () => {
-      if (mode.kind !== "edit") return null;
-      const { data, error } = await supabase
-        .from("products")
-        .select("*")
-        .eq("id", mode.id)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => (mode.kind === "edit" ? fetchProduct(mode.id) : Promise.resolve(null)),
   });
 
   const { data: existingVariants } = useQuery({
     queryKey: ["product-variants", mode.kind === "edit" ? mode.id : null],
     enabled: mode.kind === "edit",
-    queryFn: async () => {
-      if (mode.kind !== "edit") return [];
-      const { data, error } = await supabase
-        .from("product_variants")
-        .select("id, value, cost_price, selling_price, stock_quantity, sort_order")
-        .eq("product_id", mode.id)
-        .order("sort_order");
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryFn: () => (mode.kind === "edit" ? fetchVariants(mode.id) : Promise.resolve([])),
   });
 
   useEffect(() => {
@@ -190,24 +170,22 @@ export function ProductForm({ mode }: { mode: Mode }) {
 
     setSaving(true);
     try {
-      let cat = categoryId || null;
-      if (newCat.trim()) {
-        const { data, error } = await supabase
-          .from("categories")
-          .insert({ name: newCat.trim() })
-          .select("id")
-          .single();
-        if (error) throw error;
-        cat = data.id;
-      }
-
       const firstPrice = Number(cleaned[0].selling_price);
       const firstCost = Number(cleaned[0].cost_price);
       const totalStock = cleaned.reduce((s, v) => s + Number(v.stock_quantity || "0"), 0);
 
-      const payload = {
+      const variantPayload = cleaned.map((v, i) => ({
+        id: v.id,
+        value: v.value,
+        cost_price: Number(v.cost_price),
+        selling_price: Number(v.selling_price),
+        stock_quantity: Number(v.stock_quantity || "0"),
+        sort_order: i,
+      }));
+
+      const productCore = {
         name: name.trim(),
-        category_id: cat,
+        category_id: categoryId || null,
         image_url: imagePath,
         stock_qty: totalStock,
         selling_price: firstPrice,
@@ -215,45 +193,57 @@ export function ProductForm({ mode }: { mode: Mode }) {
         low_stock_threshold: parseInt(lowStock || "5", 10),
       };
 
-      let productId: string;
       if (mode.kind === "create") {
-        const { data: u } = await supabase.auth.getUser();
-        const { data, error } = await supabase
-          .from("products")
-          .insert({ ...payload, created_by: u.user?.id ?? null })
-          .select("id")
-          .single();
-        if (error) throw error;
-        productId = data.id;
+        const tempId = `temp_p_${crypto.randomUUID()}`;
+        await applyOptimistic({
+          kind: "create_product",
+          tempId,
+          product: productCore,
+          variants: variantPayload.map((v) => ({
+            value: v.value,
+            cost_price: v.cost_price,
+            selling_price: v.selling_price,
+            stock_quantity: v.stock_quantity,
+            sort_order: v.sort_order,
+          })),
+          newCategoryName: newCat.trim() || undefined,
+        });
+        await enqueue({
+          kind: "create_product",
+          tempId,
+          product: productCore,
+          variants: variantPayload.map((v) => ({
+            value: v.value,
+            cost_price: v.cost_price,
+            selling_price: v.selling_price,
+            stock_quantity: v.stock_quantity,
+            sort_order: v.sort_order,
+          })),
+          newCategoryName: newCat.trim() || undefined,
+        });
       } else {
-        productId = mode.id;
-        const { error } = await supabase.from("products").update(payload).eq("id", productId);
-        if (error) throw error;
+        const op = {
+          kind: "update_product" as const,
+          id: mode.id,
+          patch: productCore,
+          variants: {
+            keep: variantPayload.map((v, i) => ({
+              id: v.id ?? `temp_v_${mode.id}_${i}`,
+              product_id: mode.id,
+              value: v.value,
+              cost_price: v.cost_price,
+              selling_price: v.selling_price,
+              stock_quantity: v.stock_quantity,
+              sort_order: i,
+            })),
+          },
+          newCategoryName: newCat.trim() || undefined,
+        };
+        await applyOptimistic(op);
+        await enqueue(op);
       }
 
-      if (mode.kind === "edit") {
-        const keepIds = cleaned.map((v) => v.id).filter((x): x is string => !!x);
-        let delQ = supabase.from("product_variants").delete().eq("product_id", productId);
-        if (keepIds.length > 0) delQ = delQ.not("id", "in", `(${keepIds.join(",")})`);
-        const { error: delErr } = await delQ;
-        if (delErr) throw delErr;
-      }
-
-      const rows = cleaned.map((v, i) => ({
-        ...(v.id ? { id: v.id } : {}),
-        product_id: productId,
-        value: v.value,
-        cost_price: Number(v.cost_price),
-        selling_price: Number(v.selling_price),
-        stock_quantity: Number(v.stock_quantity || "0"),
-        sort_order: i,
-      }));
-      const { error: upErr } = await supabase
-        .from("product_variants")
-        .upsert(rows, { onConflict: "id" });
-      if (upErr) throw upErr;
-
-      toast.success(t("saved"));
+      toast.success(navigator.onLine ? t("saved") : t("queued_offline"));
       await qc.invalidateQueries({ queryKey: ["products"] });
       await qc.invalidateQueries({ queryKey: ["products-stats"] });
       await qc.invalidateQueries({ queryKey: ["categories"] });
@@ -269,15 +259,16 @@ export function ProductForm({ mode }: { mode: Mode }) {
   const onDelete = async () => {
     if (mode.kind !== "edit") return;
     if (!confirm(t("confirm_delete"))) return;
-    const { error } = await supabase.from("products").delete().eq("id", mode.id);
-    if (error) {
-      toast.error(error.message);
-      return;
+    try {
+      await applyOptimistic({ kind: "delete_product", id: mode.id });
+      await enqueue({ kind: "delete_product", id: mode.id });
+      toast.success(navigator.onLine ? t("saved") : t("queued_offline"));
+      await qc.invalidateQueries({ queryKey: ["products"] });
+      await qc.invalidateQueries({ queryKey: ["products-stats"] });
+      nav({ to: "/products" });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : t("error"));
     }
-    toast.success(t("saved"));
-    await qc.invalidateQueries({ queryKey: ["products"] });
-    await qc.invalidateQueries({ queryKey: ["products-stats"] });
-    nav({ to: "/products" });
   };
 
   return (

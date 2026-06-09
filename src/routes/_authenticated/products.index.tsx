@@ -1,7 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { formatINR } from "@/lib/format";
 import { useEditUnlock } from "@/lib/editUnlock";
@@ -11,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ProductImage } from "@/components/ProductImage";
 import { Plus, Search, Eye, Pencil } from "lucide-react";
+import { fetchCategories, fetchProducts } from "@/lib/offline/cache";
 
 
 export const Route = createFileRoute("/_authenticated/products/")({
@@ -27,8 +27,6 @@ type Product = {
   category_id: string | null;
 };
 
-type Category = { id: string; name: string };
-
 function ProductsPage() {
   const { t } = useI18n();
   const nav = useNavigate();
@@ -39,23 +37,12 @@ function ProductsPage() {
 
   const { data: cats = [] } = useQuery({
     queryKey: ["categories"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("categories").select("id, name").order("name");
-      if (error) throw error;
-      return (data ?? []) as Category[];
-    },
+    queryFn: fetchCategories,
   });
 
   const { data: products = [], isLoading } = useQuery({
     queryKey: ["products"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("products")
-        .select("id, name, image_url, stock_qty, selling_price, low_stock_threshold, category_id, product_variants(selling_price, sort_order)")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as (Product & { product_variants: { selling_price: number; sort_order: number }[] })[];
-    },
+    queryFn: fetchProducts,
   });
 
 
