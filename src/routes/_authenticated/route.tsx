@@ -1,14 +1,55 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
 import { EditUnlockProvider } from "@/lib/editUnlock";
 import { useRealtimeSync } from "@/lib/useRealtimeSync";
 import { startSyncWatcher } from "@/lib/offline/queue";
+import { getCachedProducts, getLastSync } from "@/lib/offlineCache";
+import { CloudOff, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 function AuthenticatedLayout() {
   useRealtimeSync();
   useEffect(() => startSyncWatcher(), []);
+
+  const [hasCache, setHasCache] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const checkCache = async () => {
+      const syncTime = await getLastSync();
+      const products = await getCachedProducts();
+      setHasCache(!!syncTime || products.length > 0);
+    };
+    void checkCache();
+  }, []);
+
+  if (hasCache === null) {
+    return <p className="py-8 text-center text-muted-foreground">Loading…</p>;
+  }
+
+  // If offline and no cache exists, show blocking offline page
+  if (typeof window !== "undefined" && !navigator.onLine && !hasCache) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 text-center">
+        <div className="max-w-md space-y-6">
+          <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-destructive/10 text-destructive">
+            <CloudOff className="h-8 w-8" />
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-2xl font-bold tracking-tight">You're Offline</h1>
+            <p className="text-muted-foreground text-sm">
+              No cached data is available on this device. Please connect to the internet once to sync the catalog.
+            </p>
+          </div>
+          <Button onClick={() => window.location.reload()} size="lg" className="h-12 w-full gap-2">
+            <RefreshCw className="h-4 w-4" /> Try again
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <EditUnlockProvider>
       <AppShell>
@@ -21,13 +62,15 @@ function AuthenticatedLayout() {
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async () => {
+    let authFailed = false;
     try {
       const { data, error } = await supabase.auth.getUser();
       if (!error && data.user) {
         return { user: data.user };
       }
+      if (error) authFailed = true;
     } catch (err) {
-      // Ignore network errors when offline
+      authFailed = true;
     }
 
     try {
@@ -35,8 +78,25 @@ export const Route = createFileRoute("/_authenticated")({
       if (data.session?.user) {
         return { user: data.session.user };
       }
+      authFailed = true;
     } catch (err) {
-      // Ignore
+      authFailed = true;
+    }
+
+    // Check if we have cached data locally
+    const syncTime = await getLastSync();
+    const products = await getCachedProducts();
+    const hasCache = !!syncTime || products.length > 0;
+
+    // If auth failed but cached data exists, bypass the redirect to load from cache
+    if (authFailed && hasCache) {
+      console.log("[Offline Guard] Auth failed but cached data exists. Allowing cached view.");
+      return { user: { id: "offline_user", email: "offline@shop.buddy" } };
+    }
+
+    // Otherwise, if we are offline and have no cache, bypass redirect so layout can render the offline page
+    if (typeof window !== "undefined" && !navigator.onLine) {
+      return { user: { id: "offline_user", email: "offline@shop.buddy" } };
     }
 
     throw redirect({ to: "/auth" });
