@@ -1,6 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
 import { formatINR } from "@/lib/format";
 import { useEditUnlock } from "@/lib/editUnlock";
@@ -9,13 +8,12 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ProductImage } from "@/components/ProductImage";
 import { ArrowLeft, Pencil } from "lucide-react";
+import { fetchCategory, fetchProduct, fetchVariants } from "@/lib/offline/cache";
 
 
 export const Route = createFileRoute("/_authenticated/products/$id/")({
   component: ProductDetailsPage,
 });
-
-type Category = { id: string; name: string };
 
 function ProductDetailsPage() {
   const { id } = Route.useParams();
@@ -27,42 +25,18 @@ function ProductDetailsPage() {
 
   const { data: product, isLoading } = useQuery({
     queryKey: ["product", id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("products")
-        .select("id, name, image_url, stock_qty, selling_price, low_stock_threshold, category_id, created_at, updated_at")
-        .eq("id", id)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => fetchProduct(id),
   });
 
   const { data: category } = useQuery({
     queryKey: ["category", product?.category_id],
     enabled: !!product?.category_id,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("categories")
-        .select("id, name")
-        .eq("id", product!.category_id!)
-        .maybeSingle();
-      if (error) throw error;
-      return data as Category | null;
-    },
+    queryFn: () => fetchCategory(product!.category_id!),
   });
 
   const { data: variants = [] } = useQuery({
     queryKey: ["product-variants", id],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("product_variants")
-        .select("id, value, selling_price, stock_quantity, sort_order")
-        .eq("product_id", id)
-        .order("sort_order");
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryFn: () => fetchVariants(id),
   });
 
 
