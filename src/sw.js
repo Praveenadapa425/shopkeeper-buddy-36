@@ -78,10 +78,14 @@ if (workbox) {
       async ({ request, event }) => {
         try {
           return await navStrategy({ request, event });
-        } catch {
+        } catch (err) {
           // Serve the precached root application shell if network fails
-          console.log("[Service Worker] Offline fallback: serving precached root shell /");
-          return (await caches.match("/")) || Response.error();
+          console.log(
+            "[Service Worker] Offline fallback: serving precached root shell /index.html",
+          );
+          return (
+            (await caches.match("/index.html")) || (await caches.match("/")) || Response.error()
+          );
         }
       },
       {

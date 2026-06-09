@@ -3,7 +3,7 @@ import workboxBuild from "workbox-build";
 const buildSW = async () => {
   const { count, size } = await workboxBuild.injectManifest({
     globDirectory: "dist",
-    globPatterns: ["**/*.{js,css,ico,png,svg,webmanifest}"],
+    globPatterns: ["**/*.{js,css,ico,png,svg,webmanifest,html}"],
     swSrc: "src/sw.js",
     swDest: "dist/sw.js",
     modifyURLPrefix: {

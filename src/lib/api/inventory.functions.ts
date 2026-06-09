@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { z } from "zod";
+import { db, getMeta, setMeta } from "@/lib/offline/db";
 
 async function sha256Hex(input: string) {
   const encoder = new TextEncoder();
@@ -16,57 +17,95 @@ async function sha256Hex(input: string) {
 export async function revealCostPrices({ data }: { data: { pin: string } }) {
   z.object({ pin: z.string().regex(/^\d{4}$/) }).parse(data);
 
-  const { data: settings, error } = await supabase
-    .from("app_settings")
-    .select("admin_pin_hash")
-    .eq("id", 1)
-    .maybeSingle();
-  if (error) throw new Error(error.message);
-  if (!settings?.admin_pin_hash) {
-    return { ok: false as const, error: "PIN not set. Set an Admin PIN in Settings." };
+  const pinRes = await verifyAdminPin({ data });
+  if (!pinRes.ok) return pinRes;
+
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    const rows = await db().products.toArray();
+    const map: Record<string, number> = {};
+    for (const r of rows ?? []) {
+      if (r.cost_price !== undefined) {
+        map[r.id] = Number(r.cost_price);
+      }
+    }
+    return { ok: true as const, costPrices: map };
   }
-  const incoming = await sha256Hex(data.pin);
-  if (incoming !== settings.admin_pin_hash) {
-    return { ok: false as const, error: "wrong_pin" };
+
+  try {
+    const { data: rows, error: pErr } = await supabase.from("products").select("id, cost_price");
+    if (pErr) throw new Error(pErr.message);
+    const map: Record<string, number> = {};
+    for (const r of rows ?? []) map[r.id] = Number(r.cost_price);
+    return { ok: true as const, costPrices: map };
+  } catch (err) {
+    const rows = await db().products.toArray();
+    const map: Record<string, number> = {};
+    for (const r of rows ?? []) {
+      if (r.cost_price !== undefined) {
+        map[r.id] = Number(r.cost_price);
+      }
+    }
+    return { ok: true as const, costPrices: map };
   }
-  const { data: rows, error: pErr } = await supabase.from("products").select("id, cost_price");
-  if (pErr) throw new Error(pErr.message);
-  const map: Record<string, number> = {};
-  for (const r of rows ?? []) map[r.id] = Number(r.cost_price);
-  return { ok: true as const, costPrices: map };
 }
 
 /** Verify the admin PIN without returning any sensitive data. Used to gate edit access. */
 export async function verifyAdminPin({ data }: { data: { pin: string } }) {
   z.object({ pin: z.string().regex(/^\d{4}$/) }).parse(data);
 
-  const { data: settings, error } = await supabase
-    .from("app_settings")
-    .select("admin_pin_hash")
-    .eq("id", 1)
-    .maybeSingle();
-
-  if (error) throw new Error(error.message);
-
-  if (!settings?.admin_pin_hash) {
-    return {
-      ok: false as const,
-      error: "PIN not set. Set an Admin PIN in Settings.",
-    };
-  }
-
   const incoming = await sha256Hex(data.pin);
 
-  if (incoming !== settings.admin_pin_hash) {
-    return {
-      ok: false as const,
-      error: "wrong_pin",
-    };
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    const cachedHash = await getMeta<string>("adminPinHash");
+    if (!cachedHash) {
+      return { ok: false as const, error: "Offline: PIN not cached. Connect online once to sync." };
+    }
+    if (incoming !== cachedHash) {
+      return { ok: false as const, error: "wrong_pin" };
+    }
+    return { ok: true as const };
   }
 
-  return {
-    ok: true as const,
-  };
+  try {
+    const { data: settings, error } = await supabase
+      .from("app_settings")
+      .select("admin_pin_hash")
+      .eq("id", 1)
+      .maybeSingle();
+
+    if (error) throw new Error(error.message);
+
+    if (!settings?.admin_pin_hash) {
+      return {
+        ok: false as const,
+        error: "PIN not set. Set an Admin PIN in Settings.",
+      };
+    }
+
+    // Cache it locally for offline use
+    await setMeta("adminPinHash", settings.admin_pin_hash);
+
+    if (incoming !== settings.admin_pin_hash) {
+      return {
+        ok: false as const,
+        error: "wrong_pin",
+      };
+    }
+
+    return {
+      ok: true as const,
+    };
+  } catch (err) {
+    // Fallback if network request fails unexpectedly
+    const cachedHash = await getMeta<string>("adminPinHash");
+    if (cachedHash) {
+      if (incoming !== cachedHash) {
+        return { ok: false as const, error: "wrong_pin" };
+      }
+      return { ok: true as const };
+    }
+    throw err;
+  }
 }
 
 export async function setAdminPin({ data }: { data: { currentPin?: string; newPin: string } }) {
@@ -119,8 +158,6 @@ export async function setAdminPin({ data }: { data: { currentPin?: string; newPi
     .eq("id", 1)
     .select();
 
-  // console.log("UPDATE RESULT:", result);
-
   if (!result.data || result.data.length === 0) {
     return {
       ok: false as const,
@@ -132,15 +169,9 @@ export async function setAdminPin({ data }: { data: { currentPin?: string; newPi
     throw new Error(result.error.message);
   }
 
-  return { ok: true as const };
+  await setMeta("adminPinHash", newHash);
 
-  // const newHash = await sha256Hex(data.newPin);
-  // const { error: upErr } = await supabase
-  //   .from("app_settings")
-  //   .update({ admin_pin_hash: newHash, updated_at: new Date().toISOString() })
-  //   .eq("id", 1);
-  // if (upErr) throw new Error(upErr.message);
-  // return { ok: true as const };
+  return { ok: true as const };
 }
 
 /** Returns a short-lived signed URL for a stored product image path. */
@@ -155,13 +186,28 @@ export async function signedImageUrl({ data }: { data: { path: string } }) {
 }
 
 export async function getMyRole() {
-  const {
-    data: { user },
-    error: uErr,
-  } = await supabase.auth.getUser();
-  if (uErr || !user) return { roles: [] };
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    const cachedRoles = await getMeta<string[]>("userRoles");
+    return { roles: cachedRoles ?? [] };
+  }
 
-  const { data, error } = await supabase.from("user_roles").select("role").eq("user_id", user.id);
-  if (error) throw new Error(error.message);
-  return { roles: (data ?? []).map((r) => r.role as "admin" | "owner") };
+  try {
+    const {
+      data: { user },
+      error: uErr,
+    } = await supabase.auth.getUser();
+    if (uErr || !user) {
+      const cachedRoles = await getMeta<string[]>("userRoles");
+      return { roles: cachedRoles ?? [] };
+    }
+
+    const { data, error } = await supabase.from("user_roles").select("role").eq("user_id", user.id);
+    if (error) throw new Error(error.message);
+    const roles = (data ?? []).map((r) => r.role as "admin" | "owner");
+    await setMeta("userRoles", roles);
+    return { roles };
+  } catch (err) {
+    const cachedRoles = await getMeta<string[]>("userRoles");
+    return { roles: cachedRoles ?? [] };
+  }
 }

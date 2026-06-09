@@ -49,7 +49,7 @@ export function registerAppServiceWorker() {
     window.location.reload();
   });
 
-  window.addEventListener("load", () => {
+  const register = () => {
     navigator.serviceWorker
       .register(SW_URL)
       .then((reg) => {
@@ -60,5 +60,11 @@ export function registerAppServiceWorker() {
       .catch((err) => {
         console.error("[Service Worker] Registration failed:", err);
       });
-  });
+  };
+
+  if (document.readyState === "complete" || document.readyState === "interactive") {
+    register();
+  } else {
+    window.addEventListener("load", register);
+  }
 }

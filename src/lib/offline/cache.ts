@@ -15,6 +15,7 @@ import {
   queueThumbnailPreload,
   cacheSingleProduct,
   type CacheStats,
+  type CachedStock,
 } from "@/lib/offlineCache";
 
 /** Run `fetcher`; on success cache result via `persist`. On failure return cache via `read`. */
@@ -189,7 +190,7 @@ export async function syncCatalogData(): Promise<void> {
   console.log("[Offline Cache] syncCatalogData starting background fetch...");
 
   try {
-    const [catRes, prodRes, varRes, stockRes] = await Promise.all([
+    const [catRes, prodRes, varRes] = await Promise.all([
       supabase.from("categories").select("id, name").order("name"),
       supabase
         .from("products")
@@ -201,20 +202,45 @@ export async function syncCatalogData(): Promise<void> {
         .from("product_variants")
         .select("id, product_id, value, cost_price, selling_price, stock_quantity, sort_order")
         .order("sort_order"),
-      supabase
-        .from("inventory_stock")
-        .select("id, product_id, variant_id, quantity, location, updated_at"),
     ]);
 
     if (catRes.error) throw catRes.error;
     if (prodRes.error) throw prodRes.error;
     if (varRes.error) throw varRes.error;
-    if (stockRes.error) throw stockRes.error;
 
     const categories = catRes.data ?? [];
     const products = prodRes.data ?? [];
     const variants = varRes.data ?? [];
-    const stock = stockRes.data ?? [];
+
+    let stock: CachedStock[] = [];
+    try {
+      const { data, error: stockErr } = await supabase
+        .from("inventory_stock")
+        .select("id, product_id, variant_id, quantity, location, updated_at");
+      if (!stockErr && data) {
+        stock = data;
+      } else if (stockErr) {
+        console.warn("[Offline Cache] Warning: failed to fetch inventory_stock:", stockErr.message);
+      }
+    } catch (e) {
+      console.warn("[Offline Cache] Warning: failed to fetch inventory_stock:", e);
+    }
+
+    let adminPinHash: string | null = null;
+    try {
+      const { data, error: settingsErr } = await supabase
+        .from("app_settings")
+        .select("admin_pin_hash")
+        .eq("id", 1)
+        .maybeSingle();
+      if (!settingsErr && data?.admin_pin_hash) {
+        adminPinHash = data.admin_pin_hash;
+      } else if (settingsErr) {
+        console.warn("[Offline Cache] Warning: failed to fetch app_settings:", settingsErr.message);
+      }
+    } catch (e) {
+      console.warn("[Offline Cache] Warning: failed to fetch app_settings:", e);
+    }
 
     console.log(
       `[Offline Cache] Supabase fetch completed. Fetched: ${categories.length} categories, ${products.length} products, ${variants.length} variants, ${stock.length} stock rows.`,
@@ -259,6 +285,9 @@ export async function syncCatalogData(): Promise<void> {
     const now = Date.now();
     await setMeta("totalProductsCount", String(products.length));
     await setMeta("lastSyncAt", now);
+    if (adminPinHash) {
+      await setMeta("adminPinHash", adminPinHash);
+    }
     console.log(
       `[Offline Cache] Metadata successfully updated: totalProductsCount = ${products.length}, lastSyncAt = ${new Date(now).toISOString()}`,
     );
