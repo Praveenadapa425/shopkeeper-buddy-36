@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { useServerFn } from "@tanstack/react-start";
+import { useServerFn } from "@/lib/useServerFn";
 import { setAdminPin, getMyRole } from "@/lib/api/inventory.functions";
 import { useI18n, type Lang } from "@/lib/i18n";
 import { Card } from "@/components/ui/card";

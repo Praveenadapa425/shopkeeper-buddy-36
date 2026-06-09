@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Package } from "lucide-react";
-import { useServerFn } from "@tanstack/react-start";
+import { useServerFn } from "@/lib/useServerFn";
 import { signedImageUrl } from "@/lib/api/inventory.functions";
 import { cacheImage, getCachedImage, isOnline } from "@/lib/offlineCache";
 
