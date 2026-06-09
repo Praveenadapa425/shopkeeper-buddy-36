@@ -11,6 +11,8 @@ import { ProductImage } from "@/components/ProductImage";
 import { Camera, ImagePlus, Trash2, ArrowLeft, Save, Plus, X } from "lucide-react";
 import { toast } from "sonner";
 import { optimizeFullImage, generateThumbnail } from "@/lib/imageOptimize";
+import { fetchCategories, fetchProduct, fetchVariants } from "@/lib/offline/cache";
+import { applyOptimistic, enqueue } from "@/lib/offline/queue";
 
 type Category = { id: string; name: string };
 
@@ -40,41 +42,19 @@ export function ProductForm({ mode }: { mode: Mode }) {
 
   const { data: cats = [] } = useQuery({
     queryKey: ["categories"],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("categories").select("id, name").order("name");
-      if (error) throw error;
-      return (data ?? []) as Category[];
-    },
+    queryFn: fetchCategories,
   });
 
   const { data: existing } = useQuery({
     queryKey: ["product", mode.kind === "edit" ? mode.id : null],
     enabled: mode.kind === "edit",
-    queryFn: async () => {
-      if (mode.kind !== "edit") return null;
-      const { data, error } = await supabase
-        .from("products")
-        .select("*")
-        .eq("id", mode.id)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
+    queryFn: () => (mode.kind === "edit" ? fetchProduct(mode.id) : Promise.resolve(null)),
   });
 
   const { data: existingVariants } = useQuery({
     queryKey: ["product-variants", mode.kind === "edit" ? mode.id : null],
     enabled: mode.kind === "edit",
-    queryFn: async () => {
-      if (mode.kind !== "edit") return [];
-      const { data, error } = await supabase
-        .from("product_variants")
-        .select("id, value, cost_price, selling_price, stock_quantity, sort_order")
-        .eq("product_id", mode.id)
-        .order("sort_order");
-      if (error) throw error;
-      return data ?? [];
-    },
+    queryFn: () => (mode.kind === "edit" ? fetchVariants(mode.id) : Promise.resolve([])),
   });
 
   useEffect(() => {
