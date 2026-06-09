@@ -28,24 +28,8 @@ function Dashboard() {
   const { data: products = [], isLoading } = useQuery({
     queryKey: ["products-stats"],
     queryFn: async () => {
-      if (!isOnline()) return getCachedProducts() as Promise<ProductRow[]>;
-      try {
-        const { data, error } = await supabase
-          .from("products")
-          .select("id, name, category_id, image_url, stock_qty, selling_price, low_stock_threshold, created_at, updated_at");
-        if (error) throw error;
-        await cacheProducts(data ?? []);
-        void queueThumbnailPreload(data ?? []);
-        void supabase
-          .from("inventory_stock")
-          .select("id, product_id, variant_id, quantity, location, updated_at")
-          .then(({ data: stock }) => stock && cacheStock(stock));
-        return (data ?? []) as ProductRow[];
-      } catch (error) {
-        const cached = await getCachedProducts();
-        if (cached.length > 0) return cached as ProductRow[];
-        throw error;
-      }
+      const cached = await getCachedProducts();
+      return cached as ProductRow[];
     },
   });
 

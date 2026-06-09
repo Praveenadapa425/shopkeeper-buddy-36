@@ -1,4 +1,5 @@
 import { signedImageUrl } from "./api/inventory.functions";
+import { db, setMeta as setDexieMeta, getMeta as getDexieMeta } from "./offline/db";
 
 const DB_NAME = "shop-buddy-offline";
 const DB_VERSION = 1;
@@ -163,7 +164,18 @@ async function setLastSync() {
   await tx("meta", "readwrite", async (store) => {
     store.put({ key: LAST_SYNC_KEY, value } satisfies MetaRow);
   });
+  try {
+    await setDexieMeta("lastSyncAt", Date.now());
+  } catch (e) {
+    console.warn("[Offline Cache] Failed to update Dexie lastSyncAt:", e);
+  }
   window.dispatchEvent(new CustomEvent(SYNC_EVENT, { detail: value }));
+}
+
+export async function cacheSingleProduct(product: CachedProduct, variants: CachedVariant[]) {
+  await putMany("products", [product]);
+  await putMany("product_variants", variants);
+  notifyStatsUpdate();
 }
 
 export async function getLastSync(): Promise<string | null> {
@@ -279,6 +291,13 @@ export async function cacheImage(
       updatedAt: new Date().toISOString(),
     } satisfies CachedImage);
   });
+  try {
+    const images = await getAll<CachedImage>("images");
+    const thumbCount = images.filter((img) => img.type === "thumb").length;
+    await setDexieMeta("imagesCachedCount", String(thumbCount));
+  } catch (e) {
+    console.warn("[Offline Cache] Failed to update Dexie imagesCachedCount:", e);
+  }
   console.log(`[Offline Cache] Image cache progress: cached ${resolvedType} image for key ${key}`);
 }
 
@@ -320,6 +339,11 @@ export async function queueThumbnailPreload(products: { id: string; image_url: s
   await tx("meta", "readwrite", async (store) => {
     store.put({ key: "totalImagesCount", value: String(items.length) });
   });
+  try {
+    await setDexieMeta("totalImagesCount", String(items.length));
+  } catch (e) {
+    console.warn("[Offline Cache] Failed to update Dexie totalImagesCount:", e);
+  }
 
   console.log(`[Offline Cache] Full catalog sync start: preloading ${items.length} thumbnails...`);
 
@@ -393,6 +417,11 @@ async function processPreloadQueue() {
     await tx("meta", "readwrite", async (store) => {
       store.put({ key: "fullSyncCompletionTime", value: completionTime });
     });
+    try {
+      await setDexieMeta("fullSyncCompletionTime", completionTime);
+    } catch (e) {
+      console.warn("[Offline Cache] Failed to update Dexie fullSyncCompletionTime:", e);
+    }
     console.log(`[Offline Cache] Full catalog sync completion: SUCCESS. Completion time: ${completionTime}`);
   }
   notifyStatsUpdate();
@@ -402,31 +431,37 @@ async function updateCacheStatus(status: CacheStats["status"]) {
   await tx("meta", "readwrite", async (store) => {
     store.put({ key: "cacheStatus", value: status });
   });
+  try {
+    await setDexieMeta("cacheStatus", status);
+  } catch (e) {
+    console.warn("[Offline Cache] Failed to update Dexie cacheStatus:", e);
+  }
 }
 
-export async function getCacheStats(): Promise<CacheStats> {
-  const products = await getAll<CachedProduct>("products");
-  const images = await getAll<CachedImage>("images");
+export async function getDexieCacheStats(): Promise<CacheStats> {
+  const dexieDb = db();
+  const allProducts = await dexieDb.products.toArray();
+  const productsCached = allProducts.filter((p) => !p._deleted).length;
 
-  const productsCached = products.length;
+  const totalProductsVal = await getDexieMeta<string>("totalProductsCount");
+  const totalProducts = totalProductsVal ? parseInt(totalProductsVal, 10) : productsCached;
 
-  const totalProductsRow = await getOne<MetaRow>("meta", "totalProductsCount");
-  const totalProducts = totalProductsRow ? parseInt(totalProductsRow.value, 10) : productsCached;
+  const totalImagesVal = await getDexieMeta<string>("totalImagesCount");
+  const totalImages = totalImagesVal ? parseInt(totalImagesVal, 10) : 0;
 
-  const totalImagesRow = await getOne<MetaRow>("meta", "totalImagesCount");
-  const totalImages = totalImagesRow ? parseInt(totalImagesRow.value, 10) : products.filter(p => p.image_url).length;
+  const imagesCachedVal = await getDexieMeta<string>("imagesCachedCount");
+  const imagesCached = imagesCachedVal ? parseInt(imagesCachedVal, 10) : 0;
 
-  const imagesCached = images.filter((img) => img.type === "thumb").length;
+  const lastSyncTimeVal = await getDexieMeta<number>("lastSyncAt");
+  const lastSyncTime = lastSyncTimeVal ? new Date(lastSyncTimeVal).toISOString() : null;
 
-  const lastSyncTime = await getLastSync();
+  const completionTimeVal = await getDexieMeta<string>("fullSyncCompletionTime");
+  const completionTime = completionTimeVal ?? null;
 
-  const completionTimeRow = await getOne<MetaRow>("meta", "fullSyncCompletionTime");
-  const completionTime = completionTimeRow ? completionTimeRow.value : null;
+  const statusVal = await getDexieMeta<string>("cacheStatus");
+  const status = (statusVal ?? "Not Started") as CacheStats["status"];
 
-  const statusRow = await getOne<MetaRow>("meta", "cacheStatus");
-  const status = (statusRow ? statusRow.value : "Not Started") as CacheStats["status"];
-
-  const stats = {
+  return {
     productsCached,
     totalProducts,
     imagesCached,
@@ -436,8 +471,11 @@ export async function getCacheStats(): Promise<CacheStats> {
     status,
     online: isOnline(),
   };
+}
 
-  console.log(`[Offline Cache] Cache statistics updates: Products=${productsCached}/${totalProducts}, Images=${imagesCached}/${totalImages}, Status=${status}`);
+export async function getCacheStats(): Promise<CacheStats> {
+  const stats = await getDexieCacheStats();
+  console.log(`[Offline Cache] Dexie cache statistics updates: Products=${stats.productsCached}/${stats.totalProducts}, Images=${stats.imagesCached}/${stats.totalImages}, Status=${stats.status}`);
   return stats;
 }
 

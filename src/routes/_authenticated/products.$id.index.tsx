@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useI18n } from "@/lib/i18n";
 import { formatINR } from "@/lib/format";
 import { useEditUnlock } from "@/lib/editUnlock";
@@ -8,7 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ProductImage } from "@/components/ProductImage";
 import { ArrowLeft, Pencil } from "lucide-react";
-import { fetchCategory, fetchProduct, fetchVariants } from "@/lib/offline/cache";
+import { fetchCategory, fetchProduct, fetchVariants, syncProductData } from "@/lib/offline/cache";
 import { isOnline } from "@/lib/offlineCache";
 
 
@@ -23,11 +24,45 @@ function ProductDetailsPage() {
   const { requireEdit } = useEditUnlock();
   const goEdit = () => requireEdit(() => nav({ to: "/products/$id/edit", params: { id } }));
 
+  const queryClient = useQueryClient();
 
   const { data: product, isLoading } = useQuery({
     queryKey: ["product", id],
     queryFn: () => fetchProduct(id),
   });
+
+  useEffect(() => {
+    let active = true;
+    const runSync = async () => {
+      if (typeof window !== "undefined" && !navigator.onLine) return;
+      try {
+        console.log(`[Product Sync] Starting background sync for product ${id}...`);
+        await syncProductData(id);
+        if (active) {
+          console.log(`[Product Sync] Sync completed for ${id}. Refreshing details view.`);
+          void queryClient.invalidateQueries({ queryKey: ["product", id] });
+          void queryClient.invalidateQueries({ queryKey: ["product-variants", id] });
+          if (product?.category_id) {
+            void queryClient.invalidateQueries({ queryKey: ["category", product.category_id] });
+          }
+        }
+      } catch (err) {
+        console.error(`[Product Sync] Sync failed for product ${id}:`, err);
+      }
+    };
+
+    void runSync();
+
+    const handleOnline = () => {
+      void runSync();
+    };
+    window.addEventListener("online", handleOnline);
+
+    return () => {
+      active = false;
+      window.removeEventListener("online", handleOnline);
+    };
+  }, [id, queryClient, product?.category_id]);
 
   const { data: category } = useQuery({
     queryKey: ["category", product?.category_id],

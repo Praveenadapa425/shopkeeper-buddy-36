@@ -1,17 +1,50 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
 import { EditUnlockProvider } from "@/lib/editUnlock";
 import { useRealtimeSync } from "@/lib/useRealtimeSync";
 import { startSyncWatcher } from "@/lib/offline/queue";
 import { getCachedProducts, getLastSync } from "@/lib/offlineCache";
+import { syncCatalogData } from "@/lib/offline/cache";
 import { CloudOff, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 function AuthenticatedLayout() {
   useRealtimeSync();
   useEffect(() => startSyncWatcher(), []);
+
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    let active = true;
+    const runSync = async () => {
+      if (typeof window !== "undefined" && !navigator.onLine) return;
+      try {
+        console.log("[Background Sync] Starting background catalog sync...");
+        await syncCatalogData();
+        if (active) {
+          console.log("[Background Sync] Sync completed. Refreshing UI queries.");
+          void queryClient.invalidateQueries();
+        }
+      } catch (err) {
+        console.error("[Background Sync] Sync failed:", err);
+      }
+    };
+
+    void runSync();
+
+    const handleOnline = () => {
+      void runSync();
+    };
+    window.addEventListener("online", handleOnline);
+
+    return () => {
+      active = false;
+      window.removeEventListener("online", handleOnline);
+    };
+  }, [queryClient]);
 
   const [hasCache, setHasCache] = useState<boolean | null>(null);
 
@@ -62,41 +95,40 @@ function AuthenticatedLayout() {
 export const Route = createFileRoute("/_authenticated")({
   ssr: false,
   beforeLoad: async () => {
-    let authFailed = false;
+    // Check if we have cached data locally first
+    const syncTime = await getLastSync();
+    const products = await getCachedProducts();
+    const hasCache = !!syncTime || products.length > 0;
+
+    if (hasCache) {
+      // Try to get session locally (fast, no network call)
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (data.session?.user) {
+          return { user: data.session.user };
+        }
+      } catch (err) {
+        // ignore
+      }
+      // Return offline user to allow cached view immediately
+      console.log("[Offline Guard] Cached data exists. Allowing cached view without blocking on auth.");
+      return { user: { id: "offline_user", email: "offline@shop.buddy" } };
+    }
+
+    // If no cache, check offline status
+    if (typeof window !== "undefined" && !navigator.onLine) {
+      // Offline and no cache -> layout will render the offline page
+      return { user: { id: "offline_user", email: "offline@shop.buddy" } };
+    }
+
+    // Online and no cache -> must authenticate and fetch data
     try {
       const { data, error } = await supabase.auth.getUser();
       if (!error && data.user) {
         return { user: data.user };
       }
-      if (error) authFailed = true;
     } catch (err) {
-      authFailed = true;
-    }
-
-    try {
-      const { data } = await supabase.auth.getSession();
-      if (data.session?.user) {
-        return { user: data.session.user };
-      }
-      authFailed = true;
-    } catch (err) {
-      authFailed = true;
-    }
-
-    // Check if we have cached data locally
-    const syncTime = await getLastSync();
-    const products = await getCachedProducts();
-    const hasCache = !!syncTime || products.length > 0;
-
-    // If auth failed but cached data exists, bypass the redirect to load from cache
-    if (authFailed && hasCache) {
-      console.log("[Offline Guard] Auth failed but cached data exists. Allowing cached view.");
-      return { user: { id: "offline_user", email: "offline@shop.buddy" } };
-    }
-
-    // Otherwise, if we are offline and have no cache, bypass redirect so layout can render the offline page
-    if (typeof window !== "undefined" && !navigator.onLine) {
-      return { user: { id: "offline_user", email: "offline@shop.buddy" } };
+      // ignore
     }
 
     throw redirect({ to: "/auth" });
