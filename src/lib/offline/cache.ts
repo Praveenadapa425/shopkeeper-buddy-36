@@ -189,6 +189,7 @@ export async function syncCatalogData(): Promise<void> {
     return;
   }
   console.log("[Offline Cache] syncCatalogData starting background fetch...");
+  console.log("[Verification Log] Catalog sync started (syncCatalogData)");
   try {
     await updateCacheStatus("In Progress");
   } catch (e) {
@@ -269,20 +270,20 @@ export async function syncCatalogData(): Promise<void> {
       const dirtyIds = new Set(dirty.map((d) => d.id));
 
       console.log(
-        `[Sync Catalog] Products fetched from Supabase:`,
-        products.map((p) => ({ id: p.id, name: p.name, updated_at: p.updated_at })),
+        `[Verification Log] Products fetched from Supabase (catalog sync count = ${products.length}):`,
+        products.map((p) => ({ id: p.id, updated_at: p.updated_at })),
       );
 
       const toPut: CachedProduct[] = [];
       const toDeleteIds: string[] = [];
 
       for (const serverProd of products) {
-        console.log(`[Sync Catalog] Processing product ID: ${serverProd.id} (${serverProd.name})`);
+        console.log(`[Verification Log] Processing product ID: ${serverProd.id}`);
         const existing = existingMap.get(serverProd.id);
 
         if (dirtyIds.has(serverProd.id)) {
           console.log(
-            `[Sync Catalog] Skipping product ${serverProd.id} because it has local dirty changes.`,
+            `[Verification Log] Decision: skip record ${serverProd.id} because it has local dirty changes (_dirty=1).`,
           );
           continue;
         }
@@ -291,24 +292,29 @@ export async function syncCatalogData(): Promise<void> {
           const existingTime = existing.updated_at ? new Date(existing.updated_at).getTime() : 0;
           const serverTime = serverProd.updated_at ? new Date(serverProd.updated_at).getTime() : 0;
 
-          console.log(`[Sync Catalog] Existing Dexie value for product ${serverProd.id}:`, {
-            name: existing.name,
+          console.log(`[Verification Log] Existing Dexie record for ${serverProd.id}:`, {
+            id: existing.id,
             updated_at: existing.updated_at,
+            _dirty: existing._dirty,
           });
           console.log(
-            `[Sync Catalog] Comparing updated_at for product ${serverProd.id}: Dexie=${existing.updated_at} (${existingTime}) vs Server=${serverProd.updated_at} (${serverTime})`,
+            `[Verification Log] Product updated_at comparisons for product ${serverProd.id}: Dexie=${existingTime} (${existing.updated_at}) vs Server=${serverTime} (${serverProd.updated_at})`,
           );
 
           if (existingTime !== serverTime) {
             console.log(
-              `[Sync Catalog] Product ${serverProd.id} has changed on server. Queuing update.`,
+              `[Verification Log] Decision: update record ${serverProd.id} because server updated_at differs from Dexie updated_at.`,
             );
             toPut.push(serverProd as CachedProduct);
           } else {
-            console.log(`[Sync Catalog] Product ${serverProd.id} is already up to date in Dexie.`);
+            console.log(
+              `[Verification Log] Decision: skip record ${serverProd.id} because server updated_at matches Dexie updated_at.`,
+            );
           }
         } else {
-          console.log(`[Sync Catalog] Product ${serverProd.id} is new. Queuing write.`);
+          console.log(
+            `[Verification Log] Decision: update record ${serverProd.id} because it does not exist in Dexie.`,
+          );
           toPut.push(serverProd as CachedProduct);
         }
       }
@@ -330,8 +336,9 @@ export async function syncCatalogData(): Promise<void> {
 
       // Dexie write/update/delete operations
       if (toPut.length > 0) {
-        console.log(`[Sync Catalog] Writing/Updating ${toPut.length} products to Dexie...`);
+        console.log(`[Verification Log] Products written to Dexie:`, toPut.map(p => ({ id: p.id, updated_at: p.updated_at })));
         await db().products.bulkPut(toPut);
+        console.log(`[Verification Log] Dexie write success. Record count updated: written ${toPut.length} product records.`);
       }
       if (toDeleteIds.length > 0) {
         console.log(`[Sync Catalog] Deleting ${toDeleteIds.length} products from Dexie...`);
@@ -470,6 +477,7 @@ export async function syncProductData(productId: string): Promise<void> {
     return;
   }
   console.log(`[Offline Cache] syncProductData starting for ${productId}...`);
+  console.log(`[Verification Log] Catalog sync started (syncProductData) for product ID: ${productId}`);
 
   try {
     const [prodRes, varRes] = await Promise.all([
@@ -493,6 +501,8 @@ export async function syncProductData(productId: string): Promise<void> {
     const product = prodRes.data;
     const variants = varRes.data ?? [];
 
+    console.log(`[Verification Log] Products fetched from Supabase (product sync):`, product ? { id: product.id, name: product.name, updated_at: product.updated_at } : null);
+
     if (!product) {
       const existing = await db().products.get(productId);
       if (existing && !existing._dirty) {
@@ -507,39 +517,47 @@ export async function syncProductData(productId: string): Promise<void> {
     // Update Dexie database
     await db().transaction("rw", db().products, db().variants, async () => {
       const existing = await db().products.get(productId);
-      console.log(`[Sync Product] Processing product ID: ${productId} (${product.name})`);
+      console.log(`[Verification Log] Processing product ID: ${productId}`);
 
       let shouldPut = false;
       if (existing) {
         const existingTime = existing.updated_at ? new Date(existing.updated_at).getTime() : 0;
         const serverTime = product.updated_at ? new Date(product.updated_at).getTime() : 0;
 
-        console.log(`[Sync Product] Existing Dexie value for product ${productId}:`, {
-          name: existing.name,
+        console.log(`[Verification Log] Existing Dexie record for ${productId}:`, {
+          id: existing.id,
           updated_at: existing.updated_at,
+          _dirty: existing._dirty,
         });
         console.log(
-          `[Sync Product] Comparing updated_at for product ${productId}: Dexie=${existing.updated_at} (${existingTime}) vs Server=${product.updated_at} (${serverTime})`,
+          `[Verification Log] Product updated_at comparisons for product ${productId}: Dexie=${existingTime} (${existing.updated_at}) vs Server=${serverTime} (${product.updated_at})`,
         );
 
         if (existing._dirty) {
           console.log(
-            `[Sync Product] Skipping product ${productId} because it has local dirty changes.`,
+            `[Verification Log] Decision: skip record ${productId} because it has local dirty changes (_dirty=1).`,
           );
         } else if (existingTime !== serverTime) {
-          console.log(`[Sync Product] Product ${productId} has changed on server. Queuing write.`);
+          console.log(
+            `[Verification Log] Decision: update record ${productId} because server updated_at differs from Dexie updated_at.`,
+          );
           shouldPut = true;
         } else {
-          console.log(`[Sync Product] Product ${productId} is already up to date in Dexie.`);
+          console.log(
+            `[Verification Log] Decision: skip record ${productId} because server updated_at matches Dexie updated_at.`,
+          );
         }
       } else {
-        console.log(`[Sync Product] Product ${productId} is new. Queuing write.`);
+        console.log(
+          `[Verification Log] Decision: update record ${productId} because it does not exist in Dexie.`,
+        );
         shouldPut = true;
       }
 
       if (shouldPut) {
-        console.log(`[Sync Product] Writing product ${productId} to Dexie.`);
+        console.log(`[Verification Log] Products written to Dexie:`, [{ id: product.id, updated_at: product.updated_at }]);
         await db().products.put(product as CachedProduct);
+        console.log(`[Verification Log] Dexie put success for product: ${productId}. Record count updated: 1`);
       }
 
       const existingVars = await db().variants.where("product_id").equals(productId).toArray();

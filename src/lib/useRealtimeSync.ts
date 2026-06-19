@@ -14,18 +14,23 @@ export function useRealtimeSync() {
     const channel = supabase
       .channel("inventory-sync")
       .on("postgres_changes", { event: "*", schema: "public", table: "products" }, (payload) => {
-        console.log("[Realtime Sync] Product change event received:", payload);
+        console.log("[Verification Log] Realtime product event received:", payload);
         const newProduct = payload.new as { id?: string } | undefined;
         const runSync = async () => {
           try {
             if (newProduct?.id) {
+              console.log(`[Verification Log] Realtime product event: sync triggered for product ID: ${newProduct.id}`);
               await syncProductData(newProduct.id);
+              console.log(`[Verification Log] Realtime product event: sync completed for product ID: ${newProduct.id}`);
             } else {
+              console.log("[Verification Log] Realtime product event: sync triggered for catalog (all products)");
               await syncCatalogData();
+              console.log("[Verification Log] Realtime product event: sync completed for catalog (all products)");
             }
           } catch (err) {
             console.error("[Realtime Sync] Catalog sync failed during realtime update:", err);
           } finally {
+            console.log("[Verification Log] React Query invalidation triggered for product:", newProduct?.id || "all");
             qc.invalidateQueries({ queryKey: ["products"] });
             qc.invalidateQueries({ queryKey: ["products-stats"] });
             if (newProduct?.id) {
@@ -40,14 +45,18 @@ export function useRealtimeSync() {
         "postgres_changes",
         { event: "*", schema: "public", table: "product_variants" },
         (payload) => {
-          console.log("[Realtime Sync] Variant change event received:", payload);
+          console.log("[Verification Log] Realtime variant event received:", payload);
           const newVariant = payload.new as { product_id?: string } | undefined;
           const runSync = async () => {
             try {
               if (newVariant?.product_id) {
+                console.log(`[Verification Log] Realtime variant event: sync triggered for product ID: ${newVariant.product_id}`);
                 await syncProductData(newVariant.product_id);
+                console.log(`[Verification Log] Realtime variant event: sync completed for product ID: ${newVariant.product_id}`);
               } else {
+                console.log("[Verification Log] Realtime variant event: sync triggered for catalog (all products)");
                 await syncCatalogData();
+                console.log("[Verification Log] Realtime variant event: sync completed for catalog (all products)");
               }
             } catch (err) {
               console.error(
@@ -55,6 +64,7 @@ export function useRealtimeSync() {
                 err,
               );
             } finally {
+              console.log("[Verification Log] React Query invalidation triggered for variant's product:", newVariant?.product_id || "all");
               qc.invalidateQueries({ queryKey: ["products"] });
               qc.invalidateQueries({ queryKey: ["products-stats"] });
               if (newVariant?.product_id) {
