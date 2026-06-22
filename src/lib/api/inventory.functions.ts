@@ -118,10 +118,8 @@ export async function setAdminPin({ data }: { data: { currentPin?: string; newPi
     newPin: z.string().regex(/^\d{4}$/),
   }).parse(data);
 
-  const {
-    data: { user },
-    error: uErr,
-  } = await supabase.auth.getUser();
+  const { data: authData, error: uErr } = await supabase.auth.getUser();
+  const user = authData?.user;
   if (uErr || !user) return { ok: false as const, error: "Not authenticated." };
 
   // Only admins can set the PIN
@@ -192,10 +190,8 @@ export async function getMyRole() {
   }
 
   try {
-    const {
-      data: { user },
-      error: uErr,
-    } = await supabase.auth.getUser();
+    const { data: authData, error: uErr } = await supabase.auth.getUser();
+    const user = authData?.user;
     if (uErr || !user) {
       const cachedRoles = await getMeta<string[]>("userRoles");
       return { roles: cachedRoles ?? [] };

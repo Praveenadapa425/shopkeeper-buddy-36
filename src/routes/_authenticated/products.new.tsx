@@ -205,8 +205,8 @@ export function ProductForm({ mode }: { mode: Mode }) {
 
       if (mode.kind === "create") {
         const tempId = `temp_p_${crypto.randomUUID()}`;
-        await applyOptimistic({
-          kind: "create_product",
+        const createPayload = {
+          kind: "create_product" as const,
           tempId,
           product: productCore,
           variants: variantPayload.map((v) => ({
@@ -217,20 +217,10 @@ export function ProductForm({ mode }: { mode: Mode }) {
             sort_order: v.sort_order,
           })),
           newCategoryName: newCat.trim() || undefined,
-        });
-        await enqueue({
-          kind: "create_product",
-          tempId,
-          product: productCore,
-          variants: variantPayload.map((v) => ({
-            value: v.value,
-            cost_price: v.cost_price,
-            selling_price: v.selling_price,
-            stock_quantity: v.stock_quantity,
-            sort_order: v.sort_order,
-          })),
-          newCategoryName: newCat.trim() || undefined,
-        });
+        };
+        console.log("[Create Product Flow] Create product request payload:", createPayload);
+        await applyOptimistic(createPayload);
+        await enqueue(createPayload);
       } else {
         const op = {
           kind: "update_product" as const,
@@ -254,10 +244,12 @@ export function ProductForm({ mode }: { mode: Mode }) {
       }
 
       toast.success(navigator.onLine ? t("saved") : t("queued_offline"));
+      console.log("[Create Product Flow] Product list invalidation: starting invalidation of queries...");
       await qc.invalidateQueries({ queryKey: ["products"] });
       await qc.invalidateQueries({ queryKey: ["products-stats"] });
       await qc.invalidateQueries({ queryKey: ["categories"] });
       await qc.invalidateQueries({ queryKey: ["product-variants"] });
+      console.log("[Create Product Flow] Product list invalidation: completed");
       nav({ to: "/products" });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : t("error"));

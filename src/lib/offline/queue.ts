@@ -79,56 +79,80 @@ async function executeOp(op: MutationOp): Promise<void> {
   if (op.kind === "create_product") {
     let categoryId = op.product.category_id;
     if (op.newCategoryName) {
+      console.log("[Create Product Flow] Inserting new category to Supabase:", op.newCategoryName);
       const { data, error } = await supabase
         .from("categories")
         .insert({ name: op.newCategoryName })
         .select("id, name")
         .single();
-      if (error) throw error;
+      if (error) {
+        console.error("[Create Product Flow] Category insertion failed:", error);
+        throw error;
+      }
       categoryId = data.id;
       // Write new category locally to Dexie immediately
-      await db().categories.put({ id: data.id, name: data.name });
+      const catWriteResult = await db().categories.put({ id: data.id, name: data.name });
+      console.log("[Create Product Flow] Dexie write result (category):", catWriteResult);
     }
-    const { data: u } = await supabase.auth.getUser();
+    const { data: authData } = await supabase.auth.getUser();
+    
+    const insertPayload = {
+      name: op.product.name,
+      category_id: categoryId,
+      image_url: op.product.image_url,
+      stock_qty: op.product.stock_qty,
+      selling_price: op.product.selling_price,
+      cost_price: op.product.cost_price,
+      low_stock_threshold: op.product.low_stock_threshold,
+      created_by: authData?.user?.id ?? null,
+    };
+    console.log("[Create Product Flow] Supabase insert request:", insertPayload);
+
     const { data, error } = await supabase
       .from("products")
-      .insert({
-        name: op.product.name,
-        category_id: categoryId,
-        image_url: op.product.image_url,
-        stock_qty: op.product.stock_qty,
-        selling_price: op.product.selling_price,
-        cost_price: op.product.cost_price,
-        low_stock_threshold: op.product.low_stock_threshold,
-        created_by: u.user?.id ?? null,
-      })
+      .insert(insertPayload)
       .select("id, name, image_url, stock_qty, selling_price, cost_price, low_stock_threshold, category_id, created_at, updated_at")
       .single();
-    if (error) throw error;
+    
+    console.log("[Create Product Flow] Supabase insert response:", { data, error });
+    if (error) {
+      console.error("[Create Product Flow] Product insertion failed:", error);
+      throw error;
+    }
+    
     const productId = data.id;
+    console.log("[Create Product Flow] Returned product ID:", productId);
 
     // Immediately put the real product in Dexie with _dirty: 0
-    await db().products.put({ ...data, _dirty: 0 } as CachedProduct);
+    const dexieWriteResult = await db().products.put({ ...data, _dirty: 0 } as CachedProduct);
+    console.log("[Create Product Flow] Dexie write result (product):", dexieWriteResult);
 
     if (op.variants.length) {
+      const varInsertPayload = op.variants.map((v, i) => ({
+        product_id: productId,
+        value: v.value,
+        cost_price: v.cost_price,
+        selling_price: v.selling_price,
+        stock_quantity: v.stock_quantity,
+        sort_order: v.sort_order ?? i,
+      }));
+      console.log("[Create Product Flow] Supabase variants insert request:", varInsertPayload);
+
       const { data: varData, error: vErr } = await supabase
         .from("product_variants")
-        .insert(
-          op.variants.map((v, i) => ({
-            product_id: productId,
-            value: v.value,
-            cost_price: v.cost_price,
-            selling_price: v.selling_price,
-            stock_quantity: v.stock_quantity,
-            sort_order: v.sort_order ?? i,
-          })),
-        )
+        .insert(varInsertPayload)
         .select("id, product_id, value, cost_price, selling_price, stock_quantity, sort_order");
-      if (vErr) throw vErr;
+      
+      console.log("[Create Product Flow] Supabase variants insert response:", { data: varData, error: vErr });
+      if (vErr) {
+        console.error("[Create Product Flow] Variants insertion failed:", vErr);
+        throw vErr;
+      }
       if (varData) {
-        await db().variants.bulkPut(
+        const dexieVarResult = await db().variants.bulkPut(
           varData.map((v) => ({ ...v, _dirty: 0 }))
         );
+        console.log("[Create Product Flow] Dexie write result (variants):", dexieVarResult);
       }
     }
     // Reconcile temp id in local cache
@@ -136,6 +160,7 @@ async function executeOp(op: MutationOp): Promise<void> {
       await db().products.delete(op.tempId);
       await db().variants.where("product_id").equals(op.tempId).delete();
     });
+    console.log("[Create Product Flow] Reconciled temporary product ID:", op.tempId);
   } else if (op.kind === "update_product") {
     let categoryId = op.patch.category_id;
     if (op.newCategoryName) {
@@ -243,6 +268,7 @@ export async function processQueue(): Promise<{ done: number; failed: number }> 
       } catch (err) {
         failed++;
         const msg = err instanceof Error ? err.message : String(err);
+        console.error("[Offline Queue] executeOp failed for operation:", next.op, "Error:", err);
         await db().mutations.update(next.id!, {
           attempts: next.attempts + 1,
           lastError: msg,
