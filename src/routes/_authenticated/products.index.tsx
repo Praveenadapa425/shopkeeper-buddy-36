@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useI18n } from "@/lib/i18n";
 import { formatINR } from "@/lib/format";
@@ -37,6 +37,14 @@ function ProductsPage() {
       return rows;
     },
   });
+
+  useEffect(() => {
+    console.log("[Create Product Flow] React Query product list data after sync:", products);
+  }, [products]);
+
+  useEffect(() => {
+    console.log("[Create Product Flow] Product list query filters applied:", { search: q, category: cat });
+  }, [q, cat]);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();

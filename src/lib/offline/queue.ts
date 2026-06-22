@@ -122,6 +122,9 @@ async function executeOp(op: MutationOp): Promise<void> {
     
     const productId = data.id;
     console.log("[Create Product Flow] Returned product ID:", productId);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("last_created_product_id", productId);
+    }
 
     // Immediately put the real product in Dexie with _dirty: 0
     const dexieWriteResult = await db().products.put({ ...data, _dirty: 0 } as CachedProduct);

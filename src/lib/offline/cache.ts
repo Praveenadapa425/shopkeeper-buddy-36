@@ -269,6 +269,15 @@ export async function syncCatalogData(): Promise<void> {
       const dirty = existingProducts.filter((p) => p._dirty === 1);
       const dirtyIds = new Set(dirty.map((d) => d.id));
 
+      console.log("[Create Product Flow] Products fetched from Supabase during startup/catalog sync:", products.map(p => ({ id: p.id, name: p.name })));
+      const lastCreatedId = typeof window !== "undefined" ? window.localStorage.getItem("last_created_product_id") : null;
+      if (lastCreatedId) {
+        const isPresent = products.some(p => p.id === lastCreatedId);
+        console.log(`[Create Product Flow] Is last created product ID (${lastCreatedId}) present in fetched Supabase results?`, isPresent);
+      } else {
+        console.log("[Create Product Flow] No last created product ID found in localStorage.");
+      }
+
       console.log(
         `[Verification Log] Products fetched from Supabase (catalog sync count = ${products.length}):`,
         products.map((p) => ({ id: p.id, updated_at: p.updated_at })),
@@ -334,6 +343,11 @@ export async function syncCatalogData(): Promise<void> {
         }
       }
 
+      if (lastCreatedId) {
+        const isWritten = toPut.some(p => p.id === lastCreatedId);
+        console.log(`[Create Product Flow] Dexie write queued for last created product ID (${lastCreatedId})?`, isWritten);
+      }
+
       // Dexie write/update/delete operations
       if (toPut.length > 0) {
         console.log(`[Verification Log] Products written to Dexie:`, toPut.map(p => ({ id: p.id, updated_at: p.updated_at })));
@@ -344,6 +358,9 @@ export async function syncCatalogData(): Promise<void> {
         console.log(`[Sync Catalog] Deleting ${toDeleteIds.length} products from Dexie...`);
         await db().products.bulkDelete(toDeleteIds);
       }
+
+      const count = await db().products.count();
+      console.log("[Create Product Flow] Product count in Dexie after sync:", count);
     });
     await setMeta("lastSync:products", Date.now());
     console.log(`[Sync Catalog] Product sync completion status: SUCCESS`);
@@ -554,6 +571,11 @@ export async function syncProductData(productId: string): Promise<void> {
         shouldPut = true;
       }
 
+      const lastCreatedId = typeof window !== "undefined" ? window.localStorage.getItem("last_created_product_id") : null;
+      if (lastCreatedId && productId === lastCreatedId) {
+        console.log(`[Create Product Flow] Dexie write queued for product ID (${productId}) in syncProductData:`, shouldPut);
+      }
+
       if (shouldPut) {
         console.log(`[Verification Log] Products written to Dexie:`, [{ id: product.id, updated_at: product.updated_at }]);
         await db().products.put(product as CachedProduct);
@@ -565,6 +587,9 @@ export async function syncProductData(productId: string): Promise<void> {
       const dirtyIds = new Set(dirtyVars.map((d) => d.id));
       await db().variants.where("product_id").equals(productId).delete();
       await db().variants.bulkPut([...variants.filter((v) => !dirtyIds.has(v.id)), ...dirtyVars]);
+      
+      const count = await db().products.count();
+      console.log("[Create Product Flow] Product count in Dexie after syncProductData:", count);
       console.log(
         `[Sync Product] Dexie write/update operations completed for product: ${productId}`,
       );
