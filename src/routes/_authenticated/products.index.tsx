@@ -48,11 +48,25 @@ function ProductsPage() {
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return products.filter((p) => {
-      if (cat !== "all" && p.category_id !== cat) return false;
-      if (needle && !p.name.toLowerCase().includes(needle)) return false;
-      return true;
-    });
+    
+    // 1. Start with all products
+    let result = products;
+
+    // 2. If a category chip is selected, filter by category_id
+    if (cat !== "all") {
+      result = result.filter((p) => p.category_id === cat);
+    }
+
+    // 3. Apply the search term to the remaining products using product.name (case-insensitive, partial matching)
+    if (needle) {
+      result = result.filter((p) => {
+        const productName = p.name ? String(p.name).toLowerCase() : "";
+        return productName.includes(needle);
+      });
+    }
+
+    // 4. Return the filtered list
+    return result;
   }, [products, q, cat]);
 
   return (

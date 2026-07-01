@@ -260,18 +260,33 @@ export async function processQueue(): Promise<{ done: number; failed: number }> 
   let done = 0;
   let failed = 0;
   try {
+    const queueLength = await db().mutations.count();
+    console.log("[Create Product Flow] processQueue started. Current queue length:", queueLength);
     while (true) {
       const next = await db().mutations.orderBy("createdAt").first();
-      if (!next) break;
+      if (!next) {
+        console.log("[Create Product Flow] processQueue: No more mutations in queue.");
+        break;
+      }
+      console.log(`[Create Product Flow] Processing mutation ID: ${next.id}, attempts so far: ${next.attempts}`);
       try {
+        console.log(`[Create Product Flow] executeOp start for mutation ID: ${next.id}, operation details:`, next.op);
         await executeOp(next.op);
+        console.log(`[Create Product Flow] executeOp success for mutation ID: ${next.id}`);
         await db().mutations.delete(next.id!);
+        console.log(`[Create Product Flow] Mutation ID: ${next.id} successfully removed from queue.`);
         done++;
         emit();
       } catch (err) {
         failed++;
         const msg = err instanceof Error ? err.message : String(err);
-        console.error("[Offline Queue] executeOp failed for operation:", next.op, "Error:", err);
+        const stack = err instanceof Error ? err.stack : undefined;
+        console.error(
+          `[Create Product Flow] executeOp failure for mutation ID: ${next.id} with full error stack:`,
+          err,
+          "\nStack trace:\n",
+          stack
+        );
         await db().mutations.update(next.id!, {
           attempts: next.attempts + 1,
           lastError: msg,
