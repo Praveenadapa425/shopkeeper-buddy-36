@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { AppShell } from "@/components/AppShell";
 import { EditUnlockProvider } from "@/lib/editUnlock";
 import { useRealtimeSync } from "@/lib/useRealtimeSync";
-import { startSyncWatcher } from "@/lib/offline/queue";
+import { startSyncWatcher, subscribeQueue, pendingCount } from "@/lib/offline/queue";
 import { getCachedProducts, getLastSync } from "@/lib/offlineCache";
 import { syncCatalogData } from "@/lib/offline/cache";
 import { CloudOff, RefreshCw } from "lucide-react";
@@ -40,10 +40,46 @@ function AuthenticatedLayout() {
     };
     window.addEventListener("online", handleOnline);
 
+    // Foreground synchronization (focus & visibilitychange)
+    const handleFocus = () => {
+      if (document.visibilityState === "visible") {
+        console.log("[Background Sync] App foreground detected. Syncing catalog...");
+        void runSync();
+      }
+    };
+    document.addEventListener("visibilitychange", handleFocus);
+    window.addEventListener("focus", handleFocus);
+
+    // Periodic fallback polling (every 5 minutes)
+    const interval = window.setInterval(() => {
+      console.log("[Background Sync] Fallback polling: syncing catalog...");
+      void runSync();
+    }, 5 * 60 * 1000);
+
     return () => {
       active = false;
       window.removeEventListener("online", handleOnline);
+      document.removeEventListener("visibilitychange", handleFocus);
+      window.removeEventListener("focus", handleFocus);
+      window.clearInterval(interval);
     };
+  }, [queryClient]);
+
+  // Queue mutation listener: invalidate query client when mutations succeed
+  useEffect(() => {
+    let prevPending: number | null = null;
+    const unsub = subscribeQueue(async () => {
+      const current = await pendingCount();
+      if (prevPending !== null && current < prevPending) {
+        console.log("[Queue Sync] Queue mutation completed. Invalidating query cache.");
+        void queryClient.invalidateQueries();
+      }
+      prevPending = current;
+    });
+    void pendingCount().then((c) => {
+      prevPending = c;
+    });
+    return unsub;
   }, [queryClient]);
 
   const [hasCache, setHasCache] = useState<boolean | null>(null);

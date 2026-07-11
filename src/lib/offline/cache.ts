@@ -15,6 +15,12 @@ import {
   queueThumbnailPreload,
   cacheSingleProduct,
   updateCacheStatus,
+  deleteCachedProduct,
+  deleteCachedVariant,
+  deleteCachedCategory,
+  deleteCachedVariantsByProduct,
+  deleteCachedStock,
+  deleteCachedStockByProduct,
   type CacheStats,
   type CachedStock,
 } from "@/lib/offlineCache";
@@ -253,16 +259,43 @@ export async function syncCatalogData(): Promise<void> {
       `[Offline Cache] Supabase fetch completed. Fetched: ${categories.length} categories, ${products.length} products, ${variants.length} variants, ${stock.length} stock rows.`,
     );
 
-    // Update Dexie database (shop-inventory-offline)
+    // Update Dexie and raw IndexedDB categories selectively
     await db().transaction("rw", db().categories, async () => {
-      await db().categories.clear();
-      if (categories.length) await db().categories.bulkPut(categories);
-    });
-    await setMeta("lastSync:categories", Date.now());
-    console.log(
-      `[Offline Cache] Categories successfully written to Dexie. Total: ${categories.length}`,
-    );
+      const existingCategories = await db().categories.toArray();
+      const existingMap = new Map(existingCategories.map((c) => [c.id, c]));
 
+      const toPutCats: CachedCategory[] = [];
+      const toDeleteCatIds: string[] = [];
+
+      for (const serverCat of categories) {
+        const existing = existingMap.get(serverCat.id);
+        if (!existing || existing.name !== serverCat.name) {
+          toPutCats.push(serverCat);
+        }
+      }
+
+      const serverCatIds = new Set(categories.map((c) => c.id));
+      for (const existing of existingCategories) {
+        if (!serverCatIds.has(existing.id)) {
+          toDeleteCatIds.push(existing.id);
+        }
+      }
+
+      if (toPutCats.length > 0) {
+        await db().categories.bulkPut(toPutCats);
+        await cacheCategories(toPutCats);
+      }
+      if (toDeleteCatIds.length > 0) {
+        await db().categories.bulkDelete(toDeleteCatIds);
+        for (const catId of toDeleteCatIds) {
+          await deleteCachedCategory(catId);
+        }
+      }
+    });
+
+    await setMeta("lastSync:categories", Date.now());
+
+    // Update Dexie and raw IndexedDB products selectively
     await db().transaction("rw", db().products, async () => {
       const existingProducts = await db().products.toArray();
       const existingMap = new Map(existingProducts.map((p) => [p.id, p]));
@@ -310,14 +343,16 @@ export async function syncCatalogData(): Promise<void> {
             `[Verification Log] Product updated_at comparisons for product ${serverProd.id}: Dexie=${existingTime} (${existing.updated_at}) vs Server=${serverTime} (${serverProd.updated_at})`,
           );
 
-          if (existingTime !== serverTime) {
+          const isServerNewer = serverTime > existingTime;
+          console.log(`[Verification Log] Timestamp comparison result for product ${serverProd.id}: serverTime (${serverTime}) > existingTime (${existingTime}) = ${isServerNewer}`);
+          if (isServerNewer) {
             console.log(
-              `[Verification Log] Decision: update record ${serverProd.id} because server updated_at differs from Dexie updated_at.`,
+              `[Verification Log] Decision: update record ${serverProd.id} because server has a newer timestamp.`,
             );
             toPut.push(serverProd as CachedProduct);
           } else {
             console.log(
-              `[Verification Log] Decision: skip record ${serverProd.id} because server updated_at matches Dexie updated_at.`,
+              `[Verification Log] Decision: skip record ${serverProd.id} because server is not newer.`,
             );
           }
         } else {
@@ -352,26 +387,49 @@ export async function syncCatalogData(): Promise<void> {
       if (toPut.length > 0) {
         console.log(`[Verification Log] Products written to Dexie:`, toPut.map(p => ({ id: p.id, updated_at: p.updated_at })));
         await db().products.bulkPut(toPut);
-        console.log(`[Verification Log] Dexie write success. Record count updated: written ${toPut.length} product records.`);
+        console.log(`[Verification Log] Dexie update success (catalog sync): bulkPut completed.`);
+        
+        // Update raw IndexedDB database (shop-buddy-offline)
+        const cachedProducts = toPut.map((p) => ({
+          id: p.id,
+          name: p.name,
+          category_id: p.category_id,
+          image_url: p.image_url,
+          stock_qty: p.stock_qty,
+          selling_price: p.selling_price,
+          cost_price: p.cost_price,
+          low_stock_threshold: p.low_stock_threshold,
+          created_at: p.created_at,
+          updated_at: p.updated_at,
+        }));
+        await cacheProducts(cachedProducts);
       }
       if (toDeleteIds.length > 0) {
         console.log(`[Sync Catalog] Deleting ${toDeleteIds.length} products from Dexie...`);
         await db().products.bulkDelete(toDeleteIds);
+        
+        // Also delete from raw IndexedDB
+        for (const pid of toDeleteIds) {
+          await deleteCachedProduct(pid);
+          await deleteCachedVariantsByProduct(pid);
+        }
       }
 
       const count = await db().products.count();
       console.log("[Create Product Flow] Product count in Dexie after sync:", count);
     });
+
     await setMeta("lastSync:products", Date.now());
     console.log(`[Sync Catalog] Product sync completion status: SUCCESS`);
 
+    // Update Dexie and raw IndexedDB variants selectively
     await db().transaction("rw", db().variants, async () => {
       const existingVariants = await db().variants.toArray();
       const existingMap = new Map(existingVariants.map((v) => [v.id, v]));
       const dirty = existingVariants.filter((v) => v._dirty || v._deleted);
       const dirtyIds = new Set(dirty.map((d) => d.id));
 
-      const toPut: CachedVariant[] = [];
+      const toPutVars: CachedVariant[] = [];
       const toDeleteIds: string[] = [];
 
       for (const serverVar of variants) {
@@ -389,11 +447,11 @@ export async function syncCatalogData(): Promise<void> {
             console.log(
               `[Sync Catalog] Variant ${serverVar.id} for product ${serverVar.product_id} has changed on server. Queuing update.`,
             );
-            toPut.push(serverVar as CachedVariant);
+            toPutVars.push(serverVar as CachedVariant);
           }
         } else {
           console.log(`[Sync Catalog] Variant ${serverVar.id} is new. Queuing write.`);
-          toPut.push(serverVar as CachedVariant);
+          toPutVars.push(serverVar as CachedVariant);
         }
       }
 
@@ -408,13 +466,31 @@ export async function syncCatalogData(): Promise<void> {
         }
       }
 
-      if (toPut.length > 0) {
-        await db().variants.bulkPut(toPut);
+      if (toPutVars.length > 0) {
+        await db().variants.bulkPut(toPutVars);
+        
+        // Also update raw IndexedDB
+        const cachedVariants = toPutVars.map((v) => ({
+          id: v.id,
+          product_id: v.product_id,
+          value: v.value,
+          selling_price: v.selling_price,
+          cost_price: v.cost_price,
+          stock_quantity: v.stock_quantity,
+          sort_order: v.sort_order,
+        }));
+        await cacheVariants(cachedVariants);
       }
       if (toDeleteIds.length > 0) {
         await db().variants.bulkDelete(toDeleteIds);
+        
+        // Also delete from raw IndexedDB
+        for (const vid of toDeleteIds) {
+          await deleteCachedVariant(vid);
+        }
       }
     });
+
     console.log(
       `[Offline Cache] Variants successfully written to Dexie. Total: ${variants.length}`,
     );
@@ -430,33 +506,13 @@ export async function syncCatalogData(): Promise<void> {
       `[Offline Cache] Metadata successfully updated: totalProductsCount = ${products.length}, lastSyncAt = ${new Date(now).toISOString()}`,
     );
 
-    // Update raw IndexedDB database (shop-buddy-offline)
-    const cachedProducts = products.map((p) => ({
-      id: p.id,
-      name: p.name,
-      category_id: p.category_id,
-      image_url: p.image_url,
-      stock_qty: p.stock_qty,
-      selling_price: p.selling_price,
-      cost_price: p.cost_price,
-      low_stock_threshold: p.low_stock_threshold,
-      created_at: p.created_at,
-      updated_at: p.updated_at,
-    }));
-    const cachedCategories = categories.map((c) => ({
-      id: c.id,
-      name: c.name,
-    }));
-    const cachedVariants = variants.map((v) => ({
-      id: v.id,
-      product_id: v.product_id,
-      value: v.value,
-      selling_price: v.selling_price,
-      cost_price: v.cost_price,
-      stock_quantity: v.stock_quantity,
-      sort_order: v.sort_order,
-    }));
-    const cachedStock = stock.map((s) => ({
+    // Update raw IndexedDB stock selectively
+    const existingStock = await getCachedStock();
+    const existingStockMap = new Map(existingStock.map((s) => [s.id, s]));
+    const toPutStock: CachedStock[] = [];
+    const toDeleteStockIds: string[] = [];
+
+    const mappedStock = stock.map((s) => ({
       id: s.id,
       product_id: s.product_id,
       variant_id: s.variant_id,
@@ -465,19 +521,44 @@ export async function syncCatalogData(): Promise<void> {
       updated_at: s.updated_at,
     }));
 
-    await cacheCategories(cachedCategories);
-    await cacheVariants(cachedVariants);
-    await cacheStock(cachedStock);
-    await cacheProducts(cachedProducts); // Updates raw IndexedDB metadata, triggers stats update event
+    for (const serverStock of mappedStock) {
+      const existing = existingStockMap.get(serverStock.id);
+      if (
+        !existing ||
+        existing.quantity !== serverStock.quantity ||
+        existing.location !== serverStock.location ||
+        existing.updated_at !== serverStock.updated_at
+      ) {
+        toPutStock.push(serverStock);
+      }
+    }
+
+    const serverStockIds = new Set(mappedStock.map((s) => s.id));
+    for (const existing of existingStock) {
+      if (!serverStockIds.has(existing.id)) {
+        toDeleteStockIds.push(existing.id);
+      }
+    }
+
+    if (toPutStock.length > 0) {
+      await cacheStock(toPutStock);
+    }
+    if (toDeleteStockIds.length > 0) {
+      for (const sid of toDeleteStockIds) {
+        await deleteCachedStock(sid);
+      }
+    }
+
     console.log(
-      `[Offline Cache] Raw IndexedDB stores (categories, variants, stock, products) updated successfully.`,
+      `[Offline Cache] Raw IndexedDB stores (categories, variants, stock, products) updated selectively successfully.`,
     );
 
     // Queue thumbnail preload
+    const imageProducts = products.map((p) => ({ id: p.id, image_url: p.image_url }));
     console.log(
-      `[Offline Cache] Queuing preload of ${cachedProducts.filter((p) => p.image_url).length} thumbnails...`,
+      `[Offline Cache] Queuing preload of ${imageProducts.filter((p) => p.image_url).length} thumbnails...`,
     );
-    void queueThumbnailPreload(cachedProducts);
+    void queueThumbnailPreload(imageProducts);
   } catch (error) {
     console.error("[Offline Cache] Error during background synchronization:", error);
     try {
@@ -521,13 +602,12 @@ export async function syncProductData(productId: string): Promise<void> {
     console.log(`[Verification Log] Products fetched from Supabase (product sync):`, product ? { id: product.id, name: product.name, updated_at: product.updated_at } : null);
 
     if (!product) {
-      const existing = await db().products.get(productId);
-      if (existing && !existing._dirty) {
-        await db().transaction("rw", db().products, db().variants, async () => {
-          await db().products.delete(productId);
-          await db().variants.where("product_id").equals(productId).delete();
-        });
-      }
+      await db().transaction("rw", db().products, db().variants, async () => {
+        await db().products.delete(productId);
+        await db().variants.where("product_id").equals(productId).delete();
+      });
+      await deleteCachedProduct(productId);
+      await deleteCachedVariantsByProduct(productId);
       return;
     }
 
@@ -554,15 +634,19 @@ export async function syncProductData(productId: string): Promise<void> {
           console.log(
             `[Verification Log] Decision: skip record ${productId} because it has local dirty changes (_dirty=1).`,
           );
-        } else if (existingTime !== serverTime) {
-          console.log(
-            `[Verification Log] Decision: update record ${productId} because server updated_at differs from Dexie updated_at.`,
-          );
-          shouldPut = true;
         } else {
-          console.log(
-            `[Verification Log] Decision: skip record ${productId} because server updated_at matches Dexie updated_at.`,
-          );
+          const isServerNewer = serverTime > existingTime;
+          console.log(`[Verification Log] Timestamp comparison result for product ${productId}: serverTime (${serverTime}) > existingTime (${existingTime}) = ${isServerNewer}`);
+          if (isServerNewer) {
+            console.log(
+              `[Verification Log] Decision: update record ${productId} because server has a newer timestamp.`,
+            );
+            shouldPut = true;
+          } else {
+            console.log(
+              `[Verification Log] Decision: skip record ${productId} because server is not newer.`,
+            );
+          }
         }
       } else {
         console.log(
@@ -579,7 +663,7 @@ export async function syncProductData(productId: string): Promise<void> {
       if (shouldPut) {
         console.log(`[Verification Log] Products written to Dexie:`, [{ id: product.id, updated_at: product.updated_at }]);
         await db().products.put(product as CachedProduct);
-        console.log(`[Verification Log] Dexie put success for product: ${productId}. Record count updated: 1`);
+        console.log(`[Verification Log] Dexie update success (product sync): put completed for product ID: ${productId}`);
       }
 
       const existingVars = await db().variants.where("product_id").equals(productId).toArray();

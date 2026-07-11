@@ -183,6 +183,44 @@ export async function cacheSingleProduct(product: CachedProduct, variants: Cache
   notifyStatsUpdate();
 }
 
+export async function deleteCachedProduct(id: string) {
+  if (!canUseIndexedDB()) return;
+  await tx("products", "readwrite", async (store) => {
+    store.delete(id);
+  });
+  notifyStatsUpdate();
+}
+
+export async function deleteCachedVariant(id: string) {
+  if (!canUseIndexedDB()) return;
+  await tx("product_variants", "readwrite", async (store) => {
+    store.delete(id);
+  });
+}
+
+export async function deleteCachedCategory(id: string) {
+  if (!canUseIndexedDB()) return;
+  await tx("categories", "readwrite", async (store) => {
+    store.delete(id);
+  });
+  notifyStatsUpdate();
+}
+
+export async function deleteCachedVariantsByProduct(productId: string) {
+  if (!canUseIndexedDB()) return;
+  await tx("product_variants", "readwrite", async (store) => {
+    const index = store.index("product_id");
+    const req = index.openCursor(IDBKeyRange.only(productId));
+    req.onsuccess = (e) => {
+      const cursor = (e.target as IDBRequest<IDBCursorWithValue | null>).result;
+      if (cursor) {
+        cursor.delete();
+        cursor.continue();
+      }
+    };
+  });
+}
+
 export async function getLastSync(): Promise<string | null> {
   const row = await getOne<MetaRow>("meta", LAST_SYNC_KEY);
   return row?.value ?? null;
@@ -262,6 +300,28 @@ export async function cacheStock(rows: CachedStock[]) {
 export async function getCachedStock(productId?: string) {
   const rows = await getAll<CachedStock>("inventory_stock");
   return productId ? rows.filter((row) => row.product_id === productId) : rows;
+}
+
+export async function deleteCachedStock(id: string) {
+  if (!canUseIndexedDB()) return;
+  await tx("inventory_stock", "readwrite", async (store) => {
+    store.delete(id);
+  });
+}
+
+export async function deleteCachedStockByProduct(productId: string) {
+  if (!canUseIndexedDB()) return;
+  await tx("inventory_stock", "readwrite", async (store) => {
+    const index = store.index("product_id");
+    const req = index.openCursor(IDBKeyRange.only(productId));
+    req.onsuccess = (e) => {
+      const cursor = (e.target as IDBRequest<IDBCursorWithValue | null>).result;
+      if (cursor) {
+        cursor.delete();
+        cursor.continue();
+      }
+    };
+  });
 }
 
 export async function cacheImage(

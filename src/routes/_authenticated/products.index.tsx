@@ -40,6 +40,7 @@ function ProductsPage() {
 
   useEffect(() => {
     console.log("[Create Product Flow] React Query product list data after sync:", products);
+    console.log("[Verification Log] UI refresh completed: product list updated in UI. Count =", products.length);
   }, [products]);
 
   useEffect(() => {

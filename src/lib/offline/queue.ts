@@ -7,6 +7,7 @@ import {
   type MutationOp,
   type QueuedMutation,
 } from "./db";
+import { cacheSingleProduct, deleteCachedProduct, deleteCachedVariantsByProduct } from "@/lib/offlineCache";
 
 const listeners = new Set<() => void>();
 export function subscribeQueue(fn: () => void) {
@@ -130,6 +131,7 @@ async function executeOp(op: MutationOp): Promise<void> {
     const dexieWriteResult = await db().products.put({ ...data, _dirty: 0 } as CachedProduct);
     console.log("[Create Product Flow] Dexie write result (product):", dexieWriteResult);
 
+    let varData: any[] | null = null;
     if (op.variants.length) {
       const varInsertPayload = op.variants.map((v, i) => ({
         product_id: productId,
@@ -141,16 +143,17 @@ async function executeOp(op: MutationOp): Promise<void> {
       }));
       console.log("[Create Product Flow] Supabase variants insert request:", varInsertPayload);
 
-      const { data: varData, error: vErr } = await supabase
+      const { data: vData, error: vErr } = await supabase
         .from("product_variants")
         .insert(varInsertPayload)
         .select("id, product_id, value, cost_price, selling_price, stock_quantity, sort_order");
       
-      console.log("[Create Product Flow] Supabase variants insert response:", { data: varData, error: vErr });
+      console.log("[Create Product Flow] Supabase variants insert response:", { data: vData, error: vErr });
       if (vErr) {
         console.error("[Create Product Flow] Variants insertion failed:", vErr);
         throw vErr;
       }
+      varData = vData;
       if (varData) {
         const dexieVarResult = await db().variants.bulkPut(
           varData.map((v) => ({ ...v, _dirty: 0 }))
@@ -164,6 +167,31 @@ async function executeOp(op: MutationOp): Promise<void> {
       await db().variants.where("product_id").equals(op.tempId).delete();
     });
     console.log("[Create Product Flow] Reconciled temporary product ID:", op.tempId);
+
+    // Write to raw IndexedDB (shop-buddy-offline)
+    const cachedProduct = {
+      id: data.id,
+      name: data.name,
+      category_id: data.category_id,
+      image_url: data.image_url,
+      stock_qty: data.stock_qty,
+      selling_price: data.selling_price,
+      cost_price: data.cost_price,
+      low_stock_threshold: data.low_stock_threshold,
+      created_at: data.created_at,
+      updated_at: data.updated_at,
+    };
+    const cachedVars = (varData ?? []).map((v) => ({
+      id: v.id,
+      product_id: v.product_id,
+      value: v.value,
+      selling_price: v.selling_price,
+      cost_price: v.cost_price,
+      stock_quantity: v.stock_quantity,
+      sort_order: v.sort_order,
+    }));
+    await cacheSingleProduct(cachedProduct, cachedVars);
+    console.log("[Create Product Flow] Synchronized created product to raw IndexedDB:", productId);
   } else if (op.kind === "update_product") {
     let categoryId = op.patch.category_id;
     if (op.newCategoryName) {
@@ -195,6 +223,7 @@ async function executeOp(op: MutationOp): Promise<void> {
       await db().products.put({ ...updatedProduct, _dirty: 0 } as CachedProduct);
     }
 
+    let finalVars: any[] = [];
     if (op.variants) {
       const keep = op.variants.keep;
       const realIds = keep.map((v) => v.id).filter((x) => x && !x.startsWith("temp_"));
@@ -229,6 +258,7 @@ async function executeOp(op: MutationOp): Promise<void> {
             }
             await db().variants.bulkPut(updatedVars.map((v) => ({ ...v, _dirty: 0 })));
           });
+          finalVars = updatedVars;
         }
       }
     } else {
@@ -241,13 +271,46 @@ async function executeOp(op: MutationOp): Promise<void> {
             await db().variants.put(ev);
           }
         }
+        finalVars = existingVars;
       });
+    }
+
+    // Write to raw IndexedDB
+    if (updatedProduct) {
+      // Clean variants in raw IndexedDB first to remove deleted ones
+      await deleteCachedVariantsByProduct(op.id);
+      
+      const cachedProduct = {
+        id: updatedProduct.id,
+        name: updatedProduct.name,
+        category_id: updatedProduct.category_id,
+        image_url: updatedProduct.image_url,
+        stock_qty: updatedProduct.stock_qty,
+        selling_price: updatedProduct.selling_price,
+        cost_price: updatedProduct.cost_price,
+        low_stock_threshold: updatedProduct.low_stock_threshold,
+        created_at: updatedProduct.created_at,
+        updated_at: updatedProduct.updated_at,
+      };
+      const cachedVars = finalVars.map((v) => ({
+        id: v.id,
+        product_id: v.product_id,
+        value: v.value,
+        selling_price: v.selling_price,
+        cost_price: v.cost_price,
+        stock_quantity: v.stock_quantity,
+        sort_order: v.sort_order,
+      }));
+      await cacheSingleProduct(cachedProduct, cachedVars);
+      console.log("[Create Product Flow] Synchronized updated product to raw IndexedDB:", op.id);
     }
   } else if (op.kind === "delete_product") {
     const { error } = await supabase.from("products").delete().eq("id", op.id);
     if (error) throw error;
     await db().products.delete(op.id);
     await db().variants.where("product_id").equals(op.id).delete();
+    await deleteCachedProduct(op.id);
+    console.log("[Create Product Flow] Synchronized deletion to raw IndexedDB for product:", op.id);
   }
 }
 

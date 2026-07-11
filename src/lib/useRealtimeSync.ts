@@ -115,7 +115,9 @@ export function useRealtimeSync() {
           void runSync();
         },
       )
-      .subscribe();
+      .subscribe((status, err) => {
+        console.log(`[Verification Log] Realtime event received: subscription status is ${status}`, err || "");
+      });
 
     return () => {
       void supabase.removeChannel(channel);
