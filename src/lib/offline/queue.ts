@@ -39,44 +39,106 @@ export async function pendingCount(): Promise<number> {
 export async function applyOptimistic(op: MutationOp) {
   if (op.kind === "create_product") {
     const id = op.tempId;
-    await db().products.put({ id, ...op.product, _dirty: 1 });
-    if (op.variants.length) {
-      await db().variants.bulkPut(
-        op.variants.map((v, i) => ({
-          id: `temp_v_${id}_${i}`,
-          product_id: id,
-          ...v,
-          sort_order: v.sort_order ?? i,
-          _dirty: 1,
-        })),
-      );
+    const finalProd = { id, ...op.product, _dirty: 1 };
+    await db().products.put(finalProd);
+    
+    const finalVars = op.variants.map((v, i) => ({
+      id: `temp_v_${id}_${i}`,
+      product_id: id,
+      ...v,
+      sort_order: v.sort_order ?? i,
+      _dirty: 1,
+    }));
+    if (finalVars.length) {
+      await db().variants.bulkPut(finalVars);
     }
+
+    // Update raw IndexedDB (shop-buddy-offline)
+    const cachedProduct = {
+      id: finalProd.id,
+      name: finalProd.name,
+      category_id: finalProd.category_id,
+      image_url: finalProd.image_url,
+      stock_qty: finalProd.stock_qty,
+      selling_price: finalProd.selling_price,
+      cost_price: finalProd.cost_price,
+      low_stock_threshold: finalProd.low_stock_threshold,
+    };
+    const cachedVars = finalVars.map((v) => ({
+      id: v.id,
+      product_id: v.product_id,
+      value: v.value,
+      selling_price: v.selling_price,
+      cost_price: v.cost_price,
+      stock_quantity: v.stock_quantity,
+      sort_order: v.sort_order,
+    }));
+    await cacheSingleProduct(cachedProduct, cachedVars);
+    console.log("[Create Product Flow] Optimistic created product written to raw IndexedDB:", id);
+
   } else if (op.kind === "update_product") {
     const cur = await db().products.get(op.id);
-    if (cur) await db().products.put({ ...cur, ...op.patch, _dirty: 1 });
-    if (op.variants) {
-      // Replace product's variants with provided set
-      await db().variants.where("product_id").equals(op.id).delete();
-      await db().variants.bulkPut(
-        op.variants.keep.map((v, i) => ({
+    if (cur) {
+      const updatedProd = { ...cur, ...op.patch, _dirty: 1 };
+      await db().products.put(updatedProd);
+
+      let finalVars: any[] = [];
+      if (op.variants) {
+        // Replace product's variants with provided set
+        await db().variants.where("product_id").equals(op.id).delete();
+        const varsToPut = op.variants.keep.map((v, i) => ({
           ...v,
           product_id: op.id,
           sort_order: i,
           _dirty: 1,
           id: v.id || `temp_v_${op.id}_${i}`,
-        })),
-      );
+        }));
+        await db().variants.bulkPut(varsToPut);
+        finalVars = varsToPut;
+      } else {
+        finalVars = await db().variants.where("product_id").equals(op.id).toArray();
+      }
+
+      // Update raw IndexedDB (shop-buddy-offline)
+      await deleteCachedVariantsByProduct(op.id);
+      
+      const cachedProduct = {
+        id: updatedProd.id,
+        name: updatedProd.name,
+        category_id: updatedProd.category_id,
+        image_url: updatedProd.image_url,
+        stock_qty: updatedProd.stock_qty,
+        selling_price: updatedProd.selling_price,
+        cost_price: updatedProd.cost_price,
+        low_stock_threshold: updatedProd.low_stock_threshold,
+        created_at: updatedProd.created_at,
+        updated_at: updatedProd.updated_at,
+      };
+      const cachedVars = finalVars.map((v) => ({
+        id: v.id,
+        product_id: v.product_id,
+        value: v.value,
+        selling_price: v.selling_price,
+        cost_price: v.cost_price,
+        stock_quantity: v.stock_quantity,
+        sort_order: v.sort_order,
+      }));
+      await cacheSingleProduct(cachedProduct, cachedVars);
+      console.log("[Create Product Flow] Optimistic updated product written to raw IndexedDB:", op.id);
     }
   } else if (op.kind === "delete_product") {
     const cur = await db().products.get(op.id);
     if (cur) await db().products.put({ ...cur, _deleted: 1 });
     const vars = await db().variants.where("product_id").equals(op.id).toArray();
     for (const v of vars) await db().variants.put({ ...v, _deleted: 1 });
+    await deleteCachedProduct(op.id);
+    await deleteCachedVariantsByProduct(op.id);
+    console.log("[Create Product Flow] Optimistic deleted product from raw IndexedDB:", op.id);
   }
   emit();
 }
 
-async function executeOp(op: MutationOp): Promise<void> {
+async function executeOp(op: MutationOp, mutationId?: string): Promise<void> {
   if (op.kind === "create_product") {
     let categoryId = op.product.category_id;
     if (op.newCategoryName) {
@@ -127,10 +189,6 @@ async function executeOp(op: MutationOp): Promise<void> {
       window.localStorage.setItem("last_created_product_id", productId);
     }
 
-    // Immediately put the real product in Dexie with _dirty: 0
-    const dexieWriteResult = await db().products.put({ ...data, _dirty: 0 } as CachedProduct);
-    console.log("[Create Product Flow] Dexie write result (product):", dexieWriteResult);
-
     let varData: any[] | null = null;
     if (op.variants.length) {
       const varInsertPayload = op.variants.map((v, i) => ({
@@ -154,13 +212,39 @@ async function executeOp(op: MutationOp): Promise<void> {
         throw vErr;
       }
       varData = vData;
-      if (varData) {
-        const dexieVarResult = await db().variants.bulkPut(
-          varData.map((v) => ({ ...v, _dirty: 0 }))
-        );
-        console.log("[Create Product Flow] Dexie write result (variants):", dexieVarResult);
+    }
+
+    // Rewrite any subsequent mutations in the queue targeting this temp ID to the new real product ID
+    const allMutations = await db().mutations.toArray();
+    for (const m of allMutations) {
+      if (m.op.id === op.tempId) {
+        m.op.id = productId;
+        await db().mutations.put(m);
+        console.log(`[Queue ID Rewrite] Rewrote mutation ${m.id} target ID from ${op.tempId} to ${productId}`);
       }
     }
+
+    // Check if there are newer mutations in the queue for this product
+    const opId = op.id || op.tempId;
+    let isLatest = true;
+    if (mutationId) {
+      const currentMutation = await db().mutations.get(mutationId);
+      if (currentMutation) {
+        const newerCount = await db().mutations
+          .filter((m) => {
+            const mOpId = m.op.id || m.op.tempId;
+            return mOpId === opId && m.createdAt > currentMutation.createdAt;
+          })
+          .count();
+        isLatest = newerCount === 0;
+        console.log(`[Create Product Flow] Checked if mutation ${mutationId} is latest for product ${opId}: ${isLatest} (newer mutations count: ${newerCount})`);
+      }
+    }
+
+    // Get current optimistic records from Dexie before deleting them
+    const currentOptimisticProduct = await db().products.get(op.tempId);
+    const currentOptimisticVariants = await db().variants.where("product_id").equals(op.tempId).toArray();
+
     // Reconcile temp id in local cache
     await db().transaction("rw", db().products, db().variants, async () => {
       await db().products.delete(op.tempId);
@@ -168,31 +252,82 @@ async function executeOp(op: MutationOp): Promise<void> {
     });
     console.log("[Create Product Flow] Reconciled temporary product ID:", op.tempId);
 
+    // Save under the real product ID in Dexie
+    if (currentOptimisticProduct) {
+      const mergedProduct = {
+        ...currentOptimisticProduct,
+        id: productId,
+        _dirty: isLatest ? 0 : 1,
+        created_at: data.created_at,
+        updated_at: data.updated_at,
+      };
+      await db().products.put(mergedProduct);
+
+      for (const v of currentOptimisticVariants) {
+        const cleanVarId = v.id.startsWith("temp_") ? `var_${productId}_${v.id.substring(v.id.lastIndexOf("_") + 1)}` : v.id;
+        await db().variants.put({
+          ...v,
+          id: cleanVarId,
+          product_id: productId,
+          _dirty: isLatest ? 0 : 1,
+        });
+      }
+      console.log("[Create Product Flow] Migrated optimistic Dexie records from temp ID to real ID:", productId);
+    } else {
+      // Fallback if no optimistic record was found
+      await db().products.put({ ...data, _dirty: isLatest ? 0 : 1 } as CachedProduct);
+      if (varData) {
+        await db().variants.bulkPut(varData.map((v) => ({ ...v, _dirty: isLatest ? 0 : 1 })));
+      }
+    }
+
     // Write to raw IndexedDB (shop-buddy-offline)
-    const cachedProduct = {
-      id: data.id,
-      name: data.name,
-      category_id: data.category_id,
-      image_url: data.image_url,
-      stock_qty: data.stock_qty,
-      selling_price: data.selling_price,
-      cost_price: data.cost_price,
-      low_stock_threshold: data.low_stock_threshold,
-      created_at: data.created_at,
-      updated_at: data.updated_at,
-    };
-    const cachedVars = (varData ?? []).map((v) => ({
-      id: v.id,
-      product_id: v.product_id,
-      value: v.value,
-      selling_price: v.selling_price,
-      cost_price: v.cost_price,
-      stock_quantity: v.stock_quantity,
-      sort_order: v.sort_order,
-    }));
-    await cacheSingleProduct(cachedProduct, cachedVars);
-    console.log("[Create Product Flow] Synchronized created product to raw IndexedDB:", productId);
+    if (currentOptimisticProduct) {
+      const cachedProduct = {
+        id: productId,
+        name: currentOptimisticProduct.name,
+        category_id: currentOptimisticProduct.category_id,
+        image_url: currentOptimisticProduct.image_url,
+        stock_qty: currentOptimisticProduct.stock_qty,
+        selling_price: currentOptimisticProduct.selling_price,
+        cost_price: currentOptimisticProduct.cost_price,
+        low_stock_threshold: currentOptimisticProduct.low_stock_threshold,
+        created_at: data.created_at,
+        updated_at: data.updated_at,
+      };
+      const cachedVars = (isLatest && varData ? varData : currentOptimisticVariants).map((v) => {
+        const cleanVarId = v.id.startsWith("temp_") ? `var_${productId}_${v.id.substring(v.id.lastIndexOf("_") + 1)}` : v.id;
+        return {
+          id: cleanVarId,
+          product_id: productId,
+          value: v.value,
+          selling_price: v.selling_price,
+          cost_price: v.cost_price,
+          stock_quantity: v.stock_quantity,
+          sort_order: v.sort_order,
+        };
+      });
+      await cacheSingleProduct(cachedProduct, cachedVars);
+      console.log("[Create Product Flow] Synchronized created product to raw IndexedDB:", productId);
+    }
   } else if (op.kind === "update_product") {
+    // Check if there are newer mutations in the queue for this product
+    const opId = op.id || op.tempId;
+    let isLatest = true;
+    if (mutationId) {
+      const currentMutation = await db().mutations.get(mutationId);
+      if (currentMutation) {
+        const newerCount = await db().mutations
+          .filter((m) => {
+            const mOpId = m.op.id || m.op.tempId;
+            return mOpId === opId && m.createdAt > currentMutation.createdAt;
+          })
+          .count();
+        isLatest = newerCount === 0;
+        console.log(`[Update Product Flow] Checked if mutation ${mutationId} is latest for product ${opId}: ${isLatest} (newer mutations count: ${newerCount})`);
+      }
+    }
+
     let categoryId = op.patch.category_id;
     if (op.newCategoryName) {
       const { data, error } = await supabase
@@ -218,9 +353,12 @@ async function executeOp(op: MutationOp): Promise<void> {
       .single();
     if (error) throw error;
 
-    // Immediately put updated product in Dexie with _dirty: 0
-    if (updatedProduct) {
+    // Immediately put updated product in Dexie with _dirty: 0 (only if isLatest)
+    if (updatedProduct && isLatest) {
       await db().products.put({ ...updatedProduct, _dirty: 0 } as CachedProduct);
+      console.log(`[Update Product Flow] Updated Dexie product ${op.id} with _dirty: 0 because it is the latest mutation.`);
+    } else if (updatedProduct) {
+      console.log(`[Update Product Flow] Skipped updating Dexie product ${op.id} with _dirty: 0 because a newer mutation exists in the queue.`);
     }
 
     let finalVars: any[] = [];
@@ -248,16 +386,18 @@ async function executeOp(op: MutationOp): Promise<void> {
         if (uErr) throw uErr;
         if (updatedVars) {
           // Reconcile variants in local Dexie cache, deleting any deleted ones and writing updated ones with _dirty: 0
-          await db().transaction("rw", db().variants, async () => {
-            const serverVarIds = new Set(updatedVars.map((v) => v.id));
-            const existingVars = await db().variants.where("product_id").equals(op.id).toArray();
-            for (const ev of existingVars) {
-              if (!serverVarIds.has(ev.id)) {
-                await db().variants.delete(ev.id);
+          if (isLatest) {
+            await db().transaction("rw", db().variants, async () => {
+              const serverVarIds = new Set(updatedVars.map((v) => v.id));
+              const existingVars = await db().variants.where("product_id").equals(op.id).toArray();
+              for (const ev of existingVars) {
+                if (!serverVarIds.has(ev.id)) {
+                  await db().variants.delete(ev.id);
+                }
               }
-            }
-            await db().variants.bulkPut(updatedVars.map((v) => ({ ...v, _dirty: 0 })));
-          });
+              await db().variants.bulkPut(updatedVars.map((v) => ({ ...v, _dirty: 0 })));
+            });
+          }
           finalVars = updatedVars;
         }
       }
@@ -265,18 +405,20 @@ async function executeOp(op: MutationOp): Promise<void> {
       // If op.variants was not provided, still clear _dirty for this product's existing variants
       await db().transaction("rw", db().variants, async () => {
         const existingVars = await db().variants.where("product_id").equals(op.id).toArray();
-        for (const ev of existingVars) {
-          if (ev._dirty) {
-            ev._dirty = 0;
-            await db().variants.put(ev);
+        if (isLatest) {
+          for (const ev of existingVars) {
+            if (ev._dirty) {
+              ev._dirty = 0;
+              await db().variants.put(ev);
+            }
           }
         }
         finalVars = existingVars;
       });
     }
 
-    // Write to raw IndexedDB
-    if (updatedProduct) {
+    // Write to raw IndexedDB (only if isLatest)
+    if (updatedProduct && isLatest) {
       // Clean variants in raw IndexedDB first to remove deleted ones
       await deleteCachedVariantsByProduct(op.id);
       
@@ -334,7 +476,7 @@ export async function processQueue(): Promise<{ done: number; failed: number }> 
       console.log(`[Create Product Flow] Processing mutation ID: ${next.id}, attempts so far: ${next.attempts}`);
       try {
         console.log(`[Create Product Flow] executeOp start for mutation ID: ${next.id}, operation details:`, next.op);
-        await executeOp(next.op);
+        await executeOp(next.op, next.id);
         console.log(`[Create Product Flow] executeOp success for mutation ID: ${next.id}`);
         await db().mutations.delete(next.id!);
         console.log(`[Create Product Flow] Mutation ID: ${next.id} successfully removed from queue.`);

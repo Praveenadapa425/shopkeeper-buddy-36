@@ -249,6 +249,7 @@ export function ProductForm({ mode }: { mode: Mode }) {
       await qc.invalidateQueries({ queryKey: ["products-stats"] });
       await qc.invalidateQueries({ queryKey: ["categories"] });
       await qc.invalidateQueries({ queryKey: ["product-variants"] });
+      await qc.invalidateQueries({ queryKey: ["product"] });
       console.log("[Create Product Flow] Product list invalidation: completed");
       nav({ to: "/products" });
     } catch (e) {

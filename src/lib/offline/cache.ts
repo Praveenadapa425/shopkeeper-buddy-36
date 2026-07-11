@@ -702,10 +702,17 @@ export async function syncProductData(productId: string): Promise<void> {
       sort_order: v.sort_order,
     }));
 
-    await cacheSingleProduct(cachedProduct, cachedVariants);
-    console.log(
-      `[Offline Cache] Single product data successfully synced to raw IndexedDB for: ${productId}`,
-    );
+    const existing = await db().products.get(productId);
+    if (!existing || !existing._dirty) {
+      await cacheSingleProduct(cachedProduct, cachedVariants);
+      console.log(
+        `[Offline Cache] Single product data successfully synced to raw IndexedDB for: ${productId}`,
+      );
+    } else {
+      console.log(
+        `[Verification Log] Skipping raw IndexedDB update for product ${productId} because it is dirty (has local modifications).`,
+      );
+    }
     console.log(`[Sync Product] Product sync completion status for ${productId}: SUCCESS`);
   } catch (error) {
     console.error(`[Offline Cache] Error syncing product data for ${productId}:`, error);
