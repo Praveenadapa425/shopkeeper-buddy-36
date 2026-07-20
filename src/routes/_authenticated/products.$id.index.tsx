@@ -39,10 +39,10 @@ function ProductDetailsPage() {
         await syncProductData(id);
         if (active) {
           console.log(`[Product Sync] Sync completed for ${id}. Refreshing details view.`);
-          void queryClient.invalidateQueries({ queryKey: ["product", id] });
-          void queryClient.invalidateQueries({ queryKey: ["product-variants", id] });
+          await queryClient.refetchQueries({ queryKey: ["product", id], type: "all" });
+          await queryClient.refetchQueries({ queryKey: ["product-variants", id], type: "all" });
           if (product?.category_id) {
-            void queryClient.invalidateQueries({ queryKey: ["category", product.category_id] });
+            await queryClient.refetchQueries({ queryKey: ["category", product.category_id], type: "all" });
           }
         }
       } catch (err) {

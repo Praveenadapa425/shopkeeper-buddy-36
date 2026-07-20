@@ -204,7 +204,7 @@ export function ProductForm({ mode }: { mode: Mode }) {
         low_stock_threshold: parseInt(lowStock || "5", 10),
       };
 
-      let savedOnline = false;
+      let updateRes: { product: any; variants: any[] } | null = null;
 
       if (mode.kind === "create") {
         try {
@@ -250,7 +250,7 @@ export function ProductForm({ mode }: { mode: Mode }) {
       } else {
         try {
           console.log("[Update Product Flow] Attempting direct online product update to Supabase...");
-          await updateProductOnline({
+          updateRes = await updateProductOnline({
             id: mode.id,
             patch: productCore,
             variants: {
@@ -303,10 +303,16 @@ export function ProductForm({ mode }: { mode: Mode }) {
         await qc.invalidateQueries({ queryKey: ["categories"] });
       }
 
-      // 2. Invalidate detail queries if editing an existing product
+      // 2. Refetch Product Details queries so React Query in-memory cache is updated from Dexie for this product
       if (mode.kind === "edit") {
-        await qc.invalidateQueries({ queryKey: ["product", mode.id] });
-        await qc.invalidateQueries({ queryKey: ["product-variants", mode.id] });
+        if (updateRes?.product) {
+          qc.setQueryData(["product", mode.id], updateRes.product);
+        }
+        if (updateRes?.variants) {
+          qc.setQueryData(["product-variants", mode.id], updateRes.variants);
+        }
+        await qc.refetchQueries({ queryKey: ["product", mode.id], type: "all" });
+        await qc.refetchQueries({ queryKey: ["product-variants", mode.id], type: "all" });
       }
 
       // 3. Force refetch of products query to ensure React Query in-memory cache is populated from Dexie BEFORE navigation

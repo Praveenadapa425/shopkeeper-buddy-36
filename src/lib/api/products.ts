@@ -242,7 +242,7 @@ export async function updateProductOnline(payload: {
   // Update Dexie
   const dexieProduct = { ...updatedProd, _dirty: 0 } as CachedProduct;
   await db().products.put(dexieProduct);
-  if (finalVars.length > 0) {
+  if (payload.variants) {
     await db().transaction("rw", db().variants, async () => {
       const serverVarIds = new Set(finalVars.map((v) => v.id));
       const existingVars = await db().variants.where("product_id").equals(payload.id).toArray();
@@ -251,7 +251,9 @@ export async function updateProductOnline(payload: {
           await db().variants.delete(ev.id);
         }
       }
-      await db().variants.bulkPut(finalVars.map((v) => ({ ...v, _dirty: 0 })));
+      if (finalVars.length > 0) {
+        await db().variants.bulkPut(finalVars.map((v) => ({ ...v, _dirty: 0 })));
+      }
     });
   }
 
@@ -280,5 +282,5 @@ export async function updateProductOnline(payload: {
   }));
   await cacheSingleProduct(cachedProduct, cachedVars);
 
-  return dexieProduct;
+  return { product: dexieProduct, variants: finalVars };
 }
