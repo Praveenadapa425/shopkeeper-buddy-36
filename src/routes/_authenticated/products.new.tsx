@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { optimizeFullImage, generateThumbnail } from "@/lib/imageOptimize";
 import { fetchCategories, fetchProduct, fetchVariants } from "@/lib/offline/cache";
 import { applyOptimistic, enqueue } from "@/lib/offline/queue";
+import { createProductOnline, updateProductOnline, isNetworkError } from "@/lib/api/products";
 
 type Mode = { kind: "create" } | { kind: "edit"; id: string };
 
@@ -203,54 +204,117 @@ export function ProductForm({ mode }: { mode: Mode }) {
         low_stock_threshold: parseInt(lowStock || "5", 10),
       };
 
+      let savedOnline = false;
+
       if (mode.kind === "create") {
-        const tempId = `temp_p_${crypto.randomUUID()}`;
-        const createPayload = {
-          kind: "create_product" as const,
-          tempId,
-          product: productCore,
-          variants: variantPayload.map((v) => ({
-            value: v.value,
-            cost_price: v.cost_price,
-            selling_price: v.selling_price,
-            stock_quantity: v.stock_quantity,
-            sort_order: v.sort_order,
-          })),
-          newCategoryName: newCat.trim() || undefined,
-        };
-        console.log("[Create Product Flow] Create product request payload:", createPayload);
-        await applyOptimistic(createPayload);
-        await enqueue(createPayload);
-      } else {
-        const op = {
-          kind: "update_product" as const,
-          id: mode.id,
-          patch: productCore,
-          variants: {
-            keep: variantPayload.map((v, i) => ({
-              id: v.id ?? `temp_v_${mode.id}_${i}`,
-              product_id: mode.id,
+        try {
+          console.log("[Create Product Flow] Attempting direct online product creation to Supabase...");
+          await createProductOnline({
+            product: productCore,
+            variants: variantPayload.map((v) => ({
               value: v.value,
               cost_price: v.cost_price,
               selling_price: v.selling_price,
               stock_quantity: v.stock_quantity,
-              sort_order: i,
+              sort_order: v.sort_order,
             })),
-          },
-          newCategoryName: newCat.trim() || undefined,
-        };
-        await applyOptimistic(op);
-        await enqueue(op);
+            newCategoryName: newCat.trim() || undefined,
+          });
+          savedOnline = true;
+          console.log("[Create Product Flow] Direct online product creation succeeded!");
+        } catch (err) {
+          console.warn("[Create Product Flow] Direct online product creation failed:", err);
+          if (isNetworkError(err)) {
+            console.log("[Create Product Flow] Network error detected. Falling back to offline optimistic queue.");
+            const tempId = `temp_p_${crypto.randomUUID()}`;
+            const createPayload = {
+              kind: "create_product" as const,
+              tempId,
+              product: productCore,
+              variants: variantPayload.map((v) => ({
+                value: v.value,
+                cost_price: v.cost_price,
+                selling_price: v.selling_price,
+                stock_quantity: v.stock_quantity,
+                sort_order: v.sort_order,
+              })),
+              newCategoryName: newCat.trim() || undefined,
+            };
+            await applyOptimistic(createPayload);
+            await enqueue(createPayload);
+          } else {
+            console.error("[Create Product Flow] Non-network error encountered. Aborting save.", err);
+            throw err;
+          }
+        }
+      } else {
+        try {
+          console.log("[Update Product Flow] Attempting direct online product update to Supabase...");
+          await updateProductOnline({
+            id: mode.id,
+            patch: productCore,
+            variants: {
+              keep: variantPayload.map((v, i) => ({
+                id: v.id ?? `temp_v_${mode.id}_${i}`,
+                product_id: mode.id,
+                value: v.value,
+                cost_price: v.cost_price,
+                selling_price: v.selling_price,
+                stock_quantity: v.stock_quantity,
+                sort_order: i,
+              })),
+            },
+            newCategoryName: newCat.trim() || undefined,
+          });
+          savedOnline = true;
+          console.log("[Update Product Flow] Direct online product update succeeded!");
+        } catch (err) {
+          console.warn("[Update Product Flow] Direct online product update failed:", err);
+          if (isNetworkError(err)) {
+            console.log("[Update Product Flow] Network error detected. Falling back to offline optimistic queue.");
+            const op = {
+              kind: "update_product" as const,
+              id: mode.id,
+              patch: productCore,
+              variants: {
+                keep: variantPayload.map((v, i) => ({
+                  id: v.id ?? `temp_v_${mode.id}_${i}`,
+                  product_id: mode.id,
+                  value: v.value,
+                  cost_price: v.cost_price,
+                  selling_price: v.selling_price,
+                  stock_quantity: v.stock_quantity,
+                  sort_order: i,
+                })),
+              },
+              newCategoryName: newCat.trim() || undefined,
+            };
+            await applyOptimistic(op);
+            await enqueue(op);
+          } else {
+            console.error("[Update Product Flow] Non-network error encountered. Aborting update.", err);
+            throw err;
+          }
+        }
       }
 
-      toast.success(navigator.onLine ? t("saved") : t("queued_offline"));
-      console.log("[Create Product Flow] Product list invalidation: starting invalidation of queries...");
-      await qc.invalidateQueries({ queryKey: ["products"] });
-      await qc.invalidateQueries({ queryKey: ["products-stats"] });
-      await qc.invalidateQueries({ queryKey: ["categories"] });
-      await qc.invalidateQueries({ queryKey: ["product-variants"] });
-      await qc.invalidateQueries({ queryKey: ["product"] });
-      console.log("[Create Product Flow] Product list invalidation: completed");
+      // 1. Invalidate categories if a new category was added
+      if (newCat.trim()) {
+        await qc.invalidateQueries({ queryKey: ["categories"] });
+      }
+
+      // 2. Invalidate detail queries if editing an existing product
+      if (mode.kind === "edit") {
+        await qc.invalidateQueries({ queryKey: ["product", mode.id] });
+        await qc.invalidateQueries({ queryKey: ["product-variants", mode.id] });
+      }
+
+      // 3. Force refetch of products query to ensure React Query in-memory cache is populated from Dexie BEFORE navigation
+      await qc.refetchQueries({ queryKey: ["products"], type: "all" });
+
+      toast.success(savedOnline ? t("saved") : t("queued_offline"));
+
+      // 4. Navigate only after Dexie write and React Query cache update are complete
       nav({ to: "/products" });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : t("error"));

@@ -109,10 +109,24 @@ export async function fetchProducts(): Promise<ProductRow[]> {
         arr.push({ selling_price: v.selling_price, sort_order: v.sort_order });
         byProduct.set(v.product_id, arr);
       }
-      return products
+      const getTime = (iso?: string) => (iso ? new Date(iso).getTime() : 0);
+      const result = products
         .filter((p) => !p._deleted)
         .map((p) => ({ ...p, product_variants: byProduct.get(p.id) ?? [] }))
-        .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
+        .sort((a, b) => getTime(b.created_at) - getTime(a.created_at));
+
+      console.log(
+        `[Verification Log] Query refetched: fetchProducts read ${result.length} products from Dexie:`,
+        result.map((p) => ({
+          id: p.id,
+          name: p.name,
+          price: p.selling_price,
+          stock: p.stock_qty,
+          created_at: p.created_at,
+          _dirty: p._dirty,
+        })),
+      );
+      return result;
     },
   );
 }

@@ -32,7 +32,12 @@ function ProductsPage() {
   const { data: products = [], isLoading } = useQuery({
     queryKey: ["products"],
     queryFn: async () => {
+      console.log("[Verification Log] Query refetched: ProductsPage fetching products from Dexie...");
       const rows = await fetchProducts();
+      console.log(
+        `[Verification Log] Query refetched: ProductsPage fetchProducts returned ${rows.length} products:`,
+        rows.map((r) => ({ id: r.id, name: r.name, price: r.selling_price, stock: r.stock_qty })),
+      );
       void queueThumbnailPreload(rows);
       return rows;
     },

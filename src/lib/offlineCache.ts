@@ -209,15 +209,20 @@ export async function deleteCachedCategory(id: string) {
 export async function deleteCachedVariantsByProduct(productId: string) {
   if (!canUseIndexedDB()) return;
   await tx("product_variants", "readwrite", async (store) => {
-    const index = store.index("product_id");
-    const req = index.openCursor(IDBKeyRange.only(productId));
-    req.onsuccess = (e) => {
-      const cursor = (e.target as IDBRequest<IDBCursorWithValue | null>).result;
-      if (cursor) {
-        cursor.delete();
-        cursor.continue();
-      }
-    };
+    return new Promise<void>((resolve, reject) => {
+      const index = store.index("product_id");
+      const req = index.openCursor(IDBKeyRange.only(productId));
+      req.onsuccess = (e) => {
+        const cursor = (e.target as IDBRequest<IDBCursorWithValue | null>).result;
+        if (cursor) {
+          cursor.delete();
+          cursor.continue();
+        } else {
+          resolve();
+        }
+      };
+      req.onerror = () => reject(req.error);
+    });
   });
 }
 
