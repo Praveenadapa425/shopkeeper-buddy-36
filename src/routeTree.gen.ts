@@ -15,8 +15,10 @@ import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedProductsIndexRouteImport } from './routes/_authenticated/products.index'
 import { Route as AuthenticatedProductsNewRouteImport } from './routes/_authenticated/products.new'
+import { Route as AuthenticatedDevProductsOnlineRouteImport } from './routes/_authenticated/dev.products-online'
 import { Route as AuthenticatedProductsIdIndexRouteImport } from './routes/_authenticated/products.$id.index'
 import { Route as AuthenticatedProductsIdEditRouteImport } from './routes/_authenticated/products.$id.edit'
+import { Route as AuthenticatedDevProductIdRouteImport } from './routes/_authenticated/dev.product.$id'
 
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
@@ -49,6 +51,12 @@ const AuthenticatedProductsNewRoute =
     path: '/products/new',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedDevProductsOnlineRoute =
+  AuthenticatedDevProductsOnlineRouteImport.update({
+    id: '/dev/products-online',
+    path: '/dev/products-online',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedProductsIdIndexRoute =
   AuthenticatedProductsIdIndexRouteImport.update({
     id: '/products/$id/',
@@ -61,13 +69,21 @@ const AuthenticatedProductsIdEditRoute =
     path: '/products/$id/edit',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedDevProductIdRoute =
+  AuthenticatedDevProductIdRouteImport.update({
+    id: '/dev/product/$id',
+    path: '/dev/product/$id',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/auth': typeof AuthRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/dev/products-online': typeof AuthenticatedDevProductsOnlineRoute
   '/products/new': typeof AuthenticatedProductsNewRoute
   '/products/': typeof AuthenticatedProductsIndexRoute
+  '/dev/product/$id': typeof AuthenticatedDevProductIdRoute
   '/products/$id/edit': typeof AuthenticatedProductsIdEditRoute
   '/products/$id/': typeof AuthenticatedProductsIdIndexRoute
 }
@@ -75,8 +91,10 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/': typeof AuthenticatedIndexRoute
+  '/dev/products-online': typeof AuthenticatedDevProductsOnlineRoute
   '/products/new': typeof AuthenticatedProductsNewRoute
   '/products': typeof AuthenticatedProductsIndexRoute
+  '/dev/product/$id': typeof AuthenticatedDevProductIdRoute
   '/products/$id/edit': typeof AuthenticatedProductsIdEditRoute
   '/products/$id': typeof AuthenticatedProductsIdIndexRoute
 }
@@ -86,8 +104,10 @@ export interface FileRoutesById {
   '/auth': typeof AuthRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/_authenticated/dev/products-online': typeof AuthenticatedDevProductsOnlineRoute
   '/_authenticated/products/new': typeof AuthenticatedProductsNewRoute
   '/_authenticated/products/': typeof AuthenticatedProductsIndexRoute
+  '/_authenticated/dev/product/$id': typeof AuthenticatedDevProductIdRoute
   '/_authenticated/products/$id/edit': typeof AuthenticatedProductsIdEditRoute
   '/_authenticated/products/$id/': typeof AuthenticatedProductsIdIndexRoute
 }
@@ -97,8 +117,10 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/settings'
+    | '/dev/products-online'
     | '/products/new'
     | '/products/'
+    | '/dev/product/$id'
     | '/products/$id/edit'
     | '/products/$id/'
   fileRoutesByTo: FileRoutesByTo
@@ -106,8 +128,10 @@ export interface FileRouteTypes {
     | '/auth'
     | '/settings'
     | '/'
+    | '/dev/products-online'
     | '/products/new'
     | '/products'
+    | '/dev/product/$id'
     | '/products/$id/edit'
     | '/products/$id'
   id:
@@ -116,8 +140,10 @@ export interface FileRouteTypes {
     | '/auth'
     | '/_authenticated/settings'
     | '/_authenticated/'
+    | '/_authenticated/dev/products-online'
     | '/_authenticated/products/new'
     | '/_authenticated/products/'
+    | '/_authenticated/dev/product/$id'
     | '/_authenticated/products/$id/edit'
     | '/_authenticated/products/$id/'
   fileRoutesById: FileRoutesById
@@ -171,6 +197,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProductsNewRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/dev/products-online': {
+      id: '/_authenticated/dev/products-online'
+      path: '/dev/products-online'
+      fullPath: '/dev/products-online'
+      preLoaderRoute: typeof AuthenticatedDevProductsOnlineRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/products/$id/': {
       id: '/_authenticated/products/$id/'
       path: '/products/$id'
@@ -185,14 +218,23 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProductsIdEditRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/dev/product/$id': {
+      id: '/_authenticated/dev/product/$id'
+      path: '/dev/product/$id'
+      fullPath: '/dev/product/$id'
+      preLoaderRoute: typeof AuthenticatedDevProductIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
+  AuthenticatedDevProductsOnlineRoute: typeof AuthenticatedDevProductsOnlineRoute
   AuthenticatedProductsNewRoute: typeof AuthenticatedProductsNewRoute
   AuthenticatedProductsIndexRoute: typeof AuthenticatedProductsIndexRoute
+  AuthenticatedDevProductIdRoute: typeof AuthenticatedDevProductIdRoute
   AuthenticatedProductsIdEditRoute: typeof AuthenticatedProductsIdEditRoute
   AuthenticatedProductsIdIndexRoute: typeof AuthenticatedProductsIdIndexRoute
 }
@@ -200,8 +242,10 @@ interface AuthenticatedRouteRouteChildren {
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
+  AuthenticatedDevProductsOnlineRoute: AuthenticatedDevProductsOnlineRoute,
   AuthenticatedProductsNewRoute: AuthenticatedProductsNewRoute,
   AuthenticatedProductsIndexRoute: AuthenticatedProductsIndexRoute,
+  AuthenticatedDevProductIdRoute: AuthenticatedDevProductIdRoute,
   AuthenticatedProductsIdEditRoute: AuthenticatedProductsIdEditRoute,
   AuthenticatedProductsIdIndexRoute: AuthenticatedProductsIdIndexRoute,
 }
