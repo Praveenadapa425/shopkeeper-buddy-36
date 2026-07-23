@@ -205,6 +205,7 @@ export function ProductForm({ mode }: { mode: Mode }) {
       };
 
       let updateRes: { product: any; variants: any[] } | null = null;
+      let savedOnline = false;
 
       if (mode.kind === "create") {
         try {
